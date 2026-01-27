@@ -1,10 +1,11 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { UserContextController } from './presentation/controllers/user-context.controller';
 import { HealthController } from './presentation/controllers/health.controller';
 import { UserContextService } from './domain/services/user-context.service';
+import { StrategyFactory } from './domain/services/strategy-factory.service';
 import { IpApiAdapter } from './infrastructure/adapters/ipapi.adapter';
 import { OpenWeatherMapAdapter } from './infrastructure/adapters/openweathermap.adapter';
 import { CatFactAdapter } from './infrastructure/adapters/catfact.adapter';
@@ -13,12 +14,14 @@ import { RxJSStrategy } from './infrastructure/strategies/rxjs.strategy';
 import { AsyncSequentialStrategy } from './infrastructure/strategies/async-sequential.strategy';
 import { HttpLoggingInterceptor } from './infrastructure/interceptors/http-logging.interceptor';
 import { HttpRetryInterceptor } from './infrastructure/interceptors/http-retry.interceptor';
+import { AllExceptionsFilter } from './infrastructure/filters/all-exceptions.filter';
 import { CorrelationIdMiddleware } from './infrastructure/middleware/correlation-id.middleware';
 import { RequestLoggerMiddleware } from './infrastructure/middleware/request-logger.middleware';
+import { UuidService } from './infrastructure/services/uuid.service';
+import { TimeService } from './infrastructure/services/time.service';
 import { LOCATION_PORT } from './domain/ports/location.port';
 import { WEATHER_PORT } from './domain/ports/weather.port';
 import { CAT_FACT_PORT } from './domain/ports/cat-fact.port';
-import { AGGREGATION_STRATEGY } from './domain/ports/aggregation-strategy.port';
 
 @Module({
   imports: [
@@ -33,11 +36,19 @@ import { AGGREGATION_STRATEGY } from './domain/ports/aggregation-strategy.port';
   ],
   controllers: [UserContextController, HealthController],
   providers: [
+    // Domain Services
     UserContextService,
+    StrategyFactory,
+
+    // Infrastructure Services
+    UuidService,
+    TimeService,
+
     // Strategies
     PromiseAllSettledStrategy,
     RxJSStrategy,
     AsyncSequentialStrategy,
+
     // Adapters as Port implementations
     {
       provide: LOCATION_PORT,
@@ -51,38 +62,14 @@ import { AGGREGATION_STRATEGY } from './domain/ports/aggregation-strategy.port';
       provide: CAT_FACT_PORT,
       useClass: CatFactAdapter,
     },
-    // Dynamic strategy provider based on ENV
-    {
-      provide: AGGREGATION_STRATEGY,
-      useFactory: (
-        promiseStrategy: PromiseAllSettledStrategy,
-        rxjsStrategy: RxJSStrategy,
-        sequentialStrategy: AsyncSequentialStrategy,
-        configService: ConfigService
-      ) => {
-        const strategy = configService.get<string>(
-          'AGGREGATION_STRATEGY',
-          'promise-allsettled'
-        );
 
-        switch (strategy) {
-          case 'rxjs':
-            return rxjsStrategy;
-          case 'async-sequential':
-            return sequentialStrategy;
-          case 'promise-allsettled':
-          default:
-            return promiseStrategy;
-        }
-      },
-      inject: [
-        PromiseAllSettledStrategy,
-        RxJSStrategy,
-        AsyncSequentialStrategy,
-        ConfigService,
-      ],
+    // Global Exception Filter (handles all errors)
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
     },
-    // Global HTTP interceptors
+
+    // Global HTTP Interceptors
     {
       provide: APP_INTERCEPTOR,
       useClass: HttpLoggingInterceptor,

@@ -10,6 +10,7 @@ import { CatFactPort } from '../../domain/ports/cat-fact.port';
 import { Location } from '../../domain/models/location.model';
 import { Weather } from '../../domain/models/weather.model';
 import { CatFact } from '../../domain/models/cat-fact.model';
+import { AdapterError } from '../../common/errors/adapter.error';
 
 @Injectable()
 export class RxJSStrategy implements AggregationStrategy {
@@ -24,7 +25,6 @@ export class RxJSStrategy implements AggregationStrategy {
     correlationId: string
   ): Promise<AggregationResult> {
     const errors: string[] = [];
-    const startTime = Date.now();
 
     // Convert Promises to Observables with error handling
     const location$ = this.fromPromiseWithError(
@@ -60,14 +60,12 @@ export class RxJSStrategy implements AggregationStrategy {
               location.longitude,
               correlationId
             );
-          } catch (error: any) {
-            errors.push(`Weather fetch failed: ${error.message}`);
+          } catch (error) {
+            errors.push(`Weather fetch failed: ${AdapterError.extractMessage(error)}`);
           }
         } else {
           errors.push('Weather fetch skipped: location unavailable');
         }
-
-        const duration = Date.now() - startTime;
 
         resolve({
           location,
@@ -89,8 +87,8 @@ export class RxJSStrategy implements AggregationStrategy {
     correlationId: string
   ) {
     return from(promise).pipe(
-      catchError((error) => {
-        errors.push(`${sourceName} fetch failed: ${error.message}`);
+      catchError((error: unknown) => {
+        errors.push(`${sourceName} fetch failed: ${AdapterError.extractMessage(error)}`);
         return of(null);
       })
     );

@@ -23,6 +23,7 @@ interface RequestResult {
 @Injectable()
 export class StatsService {
   private readonly logger = new Logger('Stats');
+  // Mutable by design - needs push/reset operations
   private requests: RequestResult[] = [];
 
   /**

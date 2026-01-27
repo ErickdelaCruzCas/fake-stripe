@@ -1,37 +1,36 @@
-import {
-  Controller,
-  Get,
-  Query,
-  Inject,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { Controller, Get, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { UserContextResponseDto } from '../../application/dto/user-context-response.dto';
-import { PromiseAllSettledStrategy } from '../../infrastructure/strategies/promise-allsettled.strategy';
-import { RxJSStrategy } from '../../infrastructure/strategies/rxjs.strategy';
-import { AsyncSequentialStrategy } from '../../infrastructure/strategies/async-sequential.strategy';
-import { LOCATION_PORT, LocationPort } from '../../domain/ports/location.port';
-import { WEATHER_PORT, WeatherPort } from '../../domain/ports/weather.port';
-import { CAT_FACT_PORT, CatFactPort } from '../../domain/ports/cat-fact.port';
-import { AggregationStrategy } from '../../domain/ports/aggregation-strategy.port';
-import { v4 as uuidv4 } from 'uuid';
+import {
+  StrategyFactory,
+  StrategyType,
+} from '../../domain/services/strategy-factory.service';
+import { UuidService } from '../../infrastructure/services/uuid.service';
+import { TimeService } from '../../infrastructure/services/time.service';
+import { UserContextService } from '../../domain/services/user-context.service';
 
+/**
+ * User Context Controller
+ *
+ * Thin controller following SRP - only handles HTTP concerns:
+ * - Route mapping
+ * - Query parameter extraction
+ * - Response formatting
+ *
+ * Business logic delegated to:
+ * - UserContextService (aggregation orchestration)
+ * - StrategyFactory (strategy selection)
+ * - UuidService (ID generation)
+ * - TimeService (timing)
+ */
 @ApiTags('user-context')
 @Controller('api/v1')
 export class UserContextController {
   constructor(
-    private readonly promiseStrategy: PromiseAllSettledStrategy,
-    private readonly rxjsStrategy: RxJSStrategy,
-    private readonly sequentialStrategy: AsyncSequentialStrategy,
-    @Inject(LOCATION_PORT) private readonly locationPort: LocationPort,
-    @Inject(WEATHER_PORT) private readonly weatherPort: WeatherPort,
-    @Inject(CAT_FACT_PORT) private readonly catFactPort: CatFactPort
+    private readonly userContextService: UserContextService,
+    private readonly strategyFactory: StrategyFactory,
+    private readonly uuidService: UuidService,
+    private readonly timeService: TimeService
   ) {}
 
   @Get('user-context')
@@ -43,7 +42,7 @@ export class UserContextController {
   @ApiQuery({
     name: 'strategy',
     required: false,
-    enum: ['promise-allsettled', 'rxjs', 'async-sequential'],
+    enum: Object.values(StrategyType),
     description: 'Aggregation strategy to use (default: promise-allsettled)',
   })
   @ApiResponse({
@@ -52,54 +51,43 @@ export class UserContextController {
     type: UserContextResponseDto,
   })
   @ApiResponse({
+    status: 400,
+    description: 'Invalid strategy name',
+  })
+  @ApiResponse({
     status: 500,
     description: 'Internal server error',
   })
   async getUserContext(
     @Query('strategy') strategyName?: string
   ): Promise<UserContextResponseDto> {
-    const correlationId = uuidv4();
+    // Generate correlation ID for distributed tracing
+    const correlationId = this.uuidService.generate();
 
-    // Select strategy based on query parameter
-    let strategy: AggregationStrategy;
-    switch (strategyName) {
-      case 'rxjs':
-        strategy = this.rxjsStrategy;
-        break;
-      case 'async-sequential':
-        strategy = this.sequentialStrategy;
-        break;
-      case 'promise-allsettled':
-      default:
-        strategy = this.promiseStrategy;
-    }
+    // Get strategy (validates strategy name, throws BadRequestException if invalid)
+    const strategy = this.strategyFactory.getStrategy(strategyName);
 
-    const startTime = Date.now();
+    // Start timing
+    const startTime = this.timeService.now();
 
-    try {
-      const result = await strategy.aggregate(
-        this.locationPort,
-        this.weatherPort,
-        this.catFactPort,
-        correlationId
-      );
+    // Delegate to service
+    const result = await this.userContextService.aggregateWithStrategy(
+      strategy,
+      correlationId
+    );
 
-      const processingTime = Date.now() - startTime;
+    // Calculate processing time
+    const processingTime = this.timeService.duration(startTime);
 
-      return {
-        location: result.location,
-        weather: result.weather,
-        entertainment: result.entertainment,
-        aggregatedAt: new Date(),
-        processingTimeMs: processingTime,
-        strategyUsed: result.strategyUsed,
-        errors: result.errors.length > 0 ? result.errors : undefined,
-      };
-    } catch (error: any) {
-      throw new HttpException(
-        `Failed to aggregate user context: ${error.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
+    // Format response
+    return {
+      location: result.location,
+      weather: result.weather,
+      entertainment: result.entertainment,
+      aggregatedAt: this.timeService.currentDate(),
+      processingTimeMs: processingTime,
+      strategyUsed: result.strategyUsed,
+      errors: result.errors.length > 0 ? result.errors : undefined,
+    };
   }
 }

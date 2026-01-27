@@ -16,10 +16,15 @@ export class OpenWeatherMapAdapter implements WeatherPort {
     private readonly configService: ConfigService,
     private readonly httpService: HttpService
   ) {
-    // Read from environment variable with fallback
-    this.apiKey =
-      this.configService.get<string>('OPENWEATHER_API_KEY') ||
-      '904c250dea7da952f578aad2312c65e5'; // Fallback API key
+    const apiKey = this.configService.get<string>('OPENWEATHER_API_KEY');
+
+    if (!apiKey) {
+      throw new Error(
+        'OPENWEATHER_API_KEY is not configured. Please set it in your .env file.'
+      );
+    }
+
+    this.apiKey = apiKey;
   }
 
   async getWeatherByCoordinates(
@@ -27,39 +32,35 @@ export class OpenWeatherMapAdapter implements WeatherPort {
     longitude: number,
     correlationId: string
   ): Promise<Weather> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService
-          .get(`${this.baseUrl}/weather`, {
-            params: {
-              lat: latitude,
-              lon: longitude,
-              appid: this.apiKey,
-              units: 'metric',
-            },
-            headers: {
-              [CORRELATION_ID_HEADER]: correlationId, // Propagar correlation ID
-            },
-          })
-          .pipe(
-            catchError((error: AxiosError) => {
-              if (error.code === 'ECONNABORTED') {
-                throw new HttpException(
-                  'Weather service timeout',
-                  HttpStatus.REQUEST_TIMEOUT
-                );
-              }
+    const response = await firstValueFrom(
+      this.httpService
+        .get(`${this.baseUrl}/weather`, {
+          params: {
+            lat: latitude,
+            lon: longitude,
+            appid: this.apiKey,
+            units: 'metric',
+          },
+          headers: {
+            [CORRELATION_ID_HEADER]: correlationId, // Propagar correlation ID
+          },
+        })
+        .pipe(
+          catchError((error: AxiosError) => {
+            if (error.code === 'ECONNABORTED') {
               throw new HttpException(
-                `Weather service error: ${error.message}`,
-                HttpStatus.BAD_GATEWAY
+                'Weather service timeout',
+                HttpStatus.REQUEST_TIMEOUT
               );
-            })
-          )
-      );
+            }
+            throw new HttpException(
+              `Weather service error: ${error.message}`,
+              HttpStatus.BAD_GATEWAY
+            );
+          })
+        )
+    );
 
-      return Weather.fromApiResponse(response.data);
-    } catch (error) {
-      throw error;
-    }
+    return Weather.fromApiResponse(response.data);
   }
 }

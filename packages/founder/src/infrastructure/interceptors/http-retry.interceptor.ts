@@ -8,6 +8,7 @@ import {
 import { Observable, throwError } from 'rxjs';
 import { catchError, retry, delay } from 'rxjs/operators';
 import { AxiosError } from 'axios';
+import { HTTP_RETRY_CONFIG } from '../config/http-retry.config';
 
 /**
  * HTTP Retry Interceptor
@@ -29,8 +30,8 @@ import { AxiosError } from 'axios';
 @Injectable()
 export class HttpRetryInterceptor implements NestInterceptor {
   private readonly logger = new Logger('HttpRetry');
-  private readonly maxRetries = 3;
-  private readonly retryableStatusCodes = [500, 502, 503, 504];
+  private readonly maxRetries = HTTP_RETRY_CONFIG.MAX_RETRIES;
+  private readonly retryableStatusCodes = HTTP_RETRY_CONFIG.RETRYABLE_STATUS_CODES;
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
@@ -60,8 +61,10 @@ export class HttpRetryInterceptor implements NestInterceptor {
             return throwError(() => error);
           }
 
-          // Backoff exponencial: 1s, 2s, 4s
-          const delayMs = Math.pow(2, retryCount - 1) * 1000;
+          // Backoff exponencial: 1s, 2s, 4s (configurado en HTTP_RETRY_CONFIG)
+          const delayMs =
+            Math.pow(HTTP_RETRY_CONFIG.BACKOFF_BASE, retryCount - 1) *
+            HTTP_RETRY_CONFIG.BACKOFF_MULTIPLIER_MS;
 
           this.logger.warn(
             JSON.stringify({

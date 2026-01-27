@@ -4,6 +4,7 @@ import { ChaosEngineService } from '../chaos/chaos-engine.service';
 import { StatsService } from '../stats/stats.service';
 import { ChargeDto } from './dto/charge.dto';
 import { ChargeResponseDto } from './dto/charge-response.dto';
+import { extractErrorMessage, extractErrorStatus } from '../common/errors/chaos.error';
 
 /**
  * Payment Service
@@ -68,14 +69,15 @@ export class PaymentService {
       );
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       // Determinar tipo de error para stats
+      const status = extractErrorStatus(error);
       const scenario =
-        error?.status === 408
+        status === 408
           ? 'timeout'
-          : error?.status === 500
+          : status === 500
           ? 'error500'
-          : error?.status === 402
+          : status === 402
           ? 'error402'
           : 'error500';
 
@@ -85,8 +87,8 @@ export class PaymentService {
         JSON.stringify({
           message: 'Payment charge failed',
           correlationId,
-          error: error?.message || 'Unknown error',
-          status: error?.status || 500,
+          error: extractErrorMessage(error),
+          status,
         })
       );
 

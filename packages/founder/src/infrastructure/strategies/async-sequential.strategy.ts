@@ -9,6 +9,7 @@ import { CatFactPort } from '../../domain/ports/cat-fact.port';
 import { Location } from '../../domain/models/location.model';
 import { Weather } from '../../domain/models/weather.model';
 import { CatFact } from '../../domain/models/cat-fact.model';
+import { AdapterError } from '../../common/errors/adapter.error';
 
 @Injectable()
 export class AsyncSequentialStrategy implements AggregationStrategy {
@@ -23,7 +24,6 @@ export class AsyncSequentialStrategy implements AggregationStrategy {
     correlationId: string
   ): Promise<AggregationResult> {
     const errors: string[] = [];
-    const startTime = Date.now();
 
     // SEQUENTIAL (NO parallel): Calls one by one
     // Useful for demonstrating performance difference
@@ -32,8 +32,8 @@ export class AsyncSequentialStrategy implements AggregationStrategy {
     let location: Location | null = null;
     try {
       location = await locationPort.getCurrentLocation(correlationId);
-    } catch (error: any) {
-      errors.push(`Location fetch failed: ${error.message}`);
+    } catch (error) {
+      errors.push(`Location fetch failed: ${AdapterError.extractMessage(error)}`);
     }
 
     // 2. Weather after (only if we have location)
@@ -45,8 +45,8 @@ export class AsyncSequentialStrategy implements AggregationStrategy {
           location.longitude,
           correlationId
         );
-      } catch (error: any) {
-        errors.push(`Weather fetch failed: ${error.message}`);
+      } catch (error) {
+        errors.push(`Weather fetch failed: ${AdapterError.extractMessage(error)}`);
       }
     } else {
       errors.push('Weather fetch skipped: location unavailable');
@@ -56,11 +56,9 @@ export class AsyncSequentialStrategy implements AggregationStrategy {
     let catFact: CatFact | null = null;
     try {
       catFact = await catFactPort.getRandomFact(correlationId);
-    } catch (error: any) {
-      errors.push(`CatFact fetch failed: ${error.message}`);
+    } catch (error) {
+      errors.push(`CatFact fetch failed: ${AdapterError.extractMessage(error)}`);
     }
-
-    const duration = Date.now() - startTime;
 
     return {
       location,

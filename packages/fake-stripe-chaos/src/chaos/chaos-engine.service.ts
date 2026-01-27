@@ -1,4 +1,5 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { CHAOS_CONFIG } from './chaos.config';
 
 /**
  * Chaos Engine Service
@@ -21,13 +22,8 @@ import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 export class ChaosEngineService {
   private readonly logger = new Logger('ChaosEngine');
 
-  // Probabilidades de cada escenario
-  private readonly scenarios = {
-    timeout: 0.30,      // 30%
-    error500: 0.20,     // 20%
-    error402: 0.10,     // 10%
-    success: 0.40,      // 40%
-  };
+  // Probabilidades de cada escenario (configurables en chaos.config.ts)
+  private readonly scenarios = CHAOS_CONFIG.SCENARIOS;
 
   /**
    * Ejecuta una operación con chaos engineering
@@ -91,8 +87,8 @@ export class ChaosEngineService {
       })
     );
 
-    // Simular servicio lento
-    await this.delay(5000);
+    // Simular servicio lento (configurado en CHAOS_CONFIG)
+    await this.delay(CHAOS_CONFIG.TIMEOUT_DELAY_MS);
 
     throw new HttpException(
       {
