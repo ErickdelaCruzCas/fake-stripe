@@ -44,6 +44,112 @@ services:
       retries: 3
       start_period: 20s
 
+  # PostgreSQL - Temporal Persistence (Phase 3)
+  temporal-postgres:
+    image: postgres:13
+    container_name: temporal-postgres
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_DB=temporal
+    ports:
+      - "5432:5432"
+    networks:
+      - fake-stripe-network
+    volumes:
+      - temporal-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Temporal Server - Workflow Orchestration (Phase 3)
+  temporal:
+    image: temporalio/auto-setup:1.22.4
+    container_name: temporal-server
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgres
+    ports:
+      - "7233:7233"
+    networks:
+      - fake-stripe-network
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Temporal UI - Workflow Visibility (Phase 3)
+  temporal-ui:
+    image: temporalio/ui:2.21.3
+    container_name: temporal-ui
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - "8080:8080"
+    networks:
+      - fake-stripe-network
+
+  # Temporal Worker - Executes Workflows and Activities (Phase 3)
+  temporal-worker:
+    build: ./packages/temporal-worker
+    container_name: temporal-worker
+    depends_on:
+      temporal:
+        condition: service_healthy
+      fake-stripe-chaos:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=development
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE=founder-tasks
+      - OPENWEATHER_API_KEY=904c250dea7da952f578aad2312c65e5
+      - FAKE_STRIPE_URL=http://fake-stripe-chaos:3001
+    networks:
+      - fake-stripe-network
+    restart: unless-stopped
+
+  # Temporal API - REST API for Workflow Management (Phase 3)
+  temporal-api:
+    build: ./packages/temporal-api
+    container_name: temporal-api
+    depends_on:
+      temporal:
+        condition: service_healthy
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE=founder-tasks
+    networks:
+      - fake-stripe-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 networks:
   fake-stripe-network:
     driver: bridge
+
+volumes:
+  temporal-postgres-data:

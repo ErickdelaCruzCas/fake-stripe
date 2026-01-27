@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🎯 PROJECT STATUS
 
-**Current Phase:** PHASE 2 - COMPLETE ✅
-**Next Phase:** PHASE 3 - Temporal Orchestration 🔜
+**Current Phase:** PHASE 3 - COMPLETE ✅
+**Next Phase:** PHASE 4 - Advanced Patterns 🔜
 
 **Architecture Evolution:**
 Progressive TypeScript project evolving from API aggregator → Temporal-orchestrated microservices (5 phases).
@@ -46,48 +46,72 @@ Chaos engineering payment service for resilience testing.
 - `POST /payment/stats/reset` - Reset stats
 - `GET /api/docs` - Swagger UI
 
----
+### Phase 3: Temporal Orchestration (Ports 3002, 7233, 8080)
+Durable workflow orchestration with automatic retry and Saga pattern.
 
-## 🔜 NEXT PHASE: Temporal Orchestration
+**Components:**
+- **Temporal Server** (Port 7233) - Workflow orchestration engine
+- **Temporal UI** (Port 8080) - Workflow visibility and debugging
+- **Temporal Worker** - Executes workflows and activities
+- **Temporal API** (Port 3002) - REST API for workflow management
+- **PostgreSQL** (Port 5432) - Temporal persistence
 
-**Goal:** Convert Founder to Temporal Worker with durable workflows.
+**Key Features:**
+- Durable execution (survives crashes)
+- Automatic retry with exponential backoff
+- Saga pattern for payment compensation
+- Signals for workflow cancellation
+- Queries for real-time progress tracking
+- Full workflow history in Temporal UI
 
-**Key Tasks:**
-1. Add Temporal Server + PostgreSQL to docker-compose
-2. Convert adapters → Temporal Activities
-3. Create `userContextWorkflow` with retry policies
-4. Implement Saga pattern for payment workflow
-5. Add Temporal API layer (port 3002)
+**Workflows:**
+- `userContextWorkflow` - Aggregate location, weather, cat fact (parallel/sequential)
+- `paymentWorkflow` - Process payment with Saga compensation
 
-**Architecture Change:**
-```
-BEFORE: Client → Founder → [External APIs + Fake Stripe]
-AFTER:  Client → Temporal API → Temporal Server → Worker
-                                                   └─ Activities [APIs + Payment]
-```
-
-**Key Benefits:** Automatic retry, durable execution, saga compensations, workflow visibility
+**Temporal API Endpoints:**
+- `POST /api/v1/workflows/user-context` - Start aggregation workflow
+- `POST /api/v1/workflows/payment` - Start payment workflow
+- `GET /api/v1/workflows/:id/status` - Query workflow status
+- `GET /api/v1/workflows/:id/progress` - Real-time progress
+- `GET /api/v1/workflows/:id/result` - Get result (waits for completion)
+- `POST /api/v1/workflows/:id/cancel` - Cancel workflow
+- `GET /api/v1/workflows/:id/history` - Execution history
+- `GET /health` - Health check
+- `GET /api/docs` - Swagger UI
 
 ---
 
 ## ⚡ QUICK START
 
 ```bash
-# Start services
-cd packages/founder && npm run dev           # Port 3000
-cd packages/fake-stripe-chaos && npm run dev  # Port 3001
-
-# Or with Docker
+# Start all services with Docker (recommended)
 docker-compose up -d
 
+# Or start services individually
+cd packages/founder && npm run dev           # Port 3000
+cd packages/fake-stripe-chaos && npm run dev  # Port 3001
+cd packages/temporal-worker && npm run dev   # Temporal Worker
+cd packages/temporal-api && npm run dev      # Port 3002
+
+# Access services
+open http://localhost:3000/api/docs          # Founder API
+open http://localhost:3001/api/docs          # Fake Stripe API
+open http://localhost:3002/api/docs          # Temporal API
+open http://localhost:8080                   # Temporal UI
+
 # Test
-# Open requests.http in VS Code with REST Client extension
+# Open requests.http or packages/temporal-api/requests.http in VS Code
+# Install "REST Client" extension to use
 ```
 
 **Important Files:**
 - `packages/founder/README.md` - Founder service documentation
 - `packages/fake-stripe-chaos/README.md` - Chaos service guide
-- `requests.http` - API test collection
+- `packages/temporal-worker/README.md` - Temporal Worker guide
+- `packages/temporal-api/README.md` - Temporal API documentation
+- `docs/TEMPORAL_ARCHITECTURE.md` - Complete Temporal architecture guide
+- `requests.http` - API test collection (Founder + Fake Stripe)
+- `packages/temporal-api/requests.http` - Temporal API test collection
 
 ---
 

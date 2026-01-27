@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
@@ -14,8 +14,5 @@ COPY . .
 # Build TypeScript
 RUN npm run build
 
-# Expose port
-EXPOSE 3001
-
-# Start application
+# Start Temporal Worker
 CMD ["npm", "run", "start"]

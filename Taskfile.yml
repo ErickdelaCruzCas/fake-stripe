@@ -1,0 +1,369 @@
+version: '3'
+
+# Taskfile for Fake Stripe Project
+# Install task: https://taskfile.dev/installation/
+# Usage: task [command]
+
+vars:
+  DOCKER_COMPOSE: docker-compose
+  FOUNDER_DIR: packages/founder
+  FAKE_STRIPE_DIR: packages/fake-stripe-chaos
+  TEMPORAL_WORKER_DIR: packages/temporal-worker
+  TEMPORAL_API_DIR: packages/temporal-api
+
+tasks:
+  # ============================================
+  # Docker Commands
+  # ============================================
+
+  up:
+    desc: Start all services with Docker Compose
+    cmds:
+      - "{{.DOCKER_COMPOSE}} up -d"
+      - echo "✅ All services started"
+      - echo "📡 Temporal API: http://localhost:3002/api/docs"
+      - echo "📊 Temporal UI: http://localhost:8080"
+      - echo "🏗️  Founder API: http://localhost:3000/api/docs"
+      - echo "💳 Fake Stripe: http://localhost:3001/api/docs"
+
+  down:
+    desc: Stop all services
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down"
+
+  restart:
+    desc: Restart all services
+    cmds:
+      - task: down
+      - task: up
+
+  ps:
+    desc: Show status of all services
+    cmds:
+      - "{{.DOCKER_COMPOSE}} ps"
+
+  logs:
+    desc: Show logs from all services (use task logs -- -f to follow)
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs {{.CLI_ARGS}}"
+
+  logs:temporal-worker:
+    desc: Show Temporal Worker logs
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs -f temporal-worker"
+
+  logs:temporal-api:
+    desc: Show Temporal API logs
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs -f temporal-api"
+
+  logs:founder:
+    desc: Show Founder logs
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs -f founder"
+
+  logs:fake-stripe:
+    desc: Show Fake Stripe logs
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs -f fake-stripe-chaos"
+
+  logs:temporal:
+    desc: Show Temporal Server logs
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs -f temporal"
+
+  # ============================================
+  # Installation & Setup
+  # ============================================
+
+  install:
+    desc: Install dependencies for all packages
+    cmds:
+      - task: install:founder
+      - task: install:fake-stripe
+      - task: install:temporal-worker
+      - task: install:temporal-api
+
+  install:founder:
+    desc: Install Founder dependencies
+    dir: "{{.FOUNDER_DIR}}"
+    cmds:
+      - npm install
+
+  install:fake-stripe:
+    desc: Install Fake Stripe dependencies
+    dir: "{{.FAKE_STRIPE_DIR}}"
+    cmds:
+      - npm install
+
+  install:temporal-worker:
+    desc: Install Temporal Worker dependencies
+    dir: "{{.TEMPORAL_WORKER_DIR}}"
+    cmds:
+      - npm install
+
+  install:temporal-api:
+    desc: Install Temporal API dependencies
+    dir: "{{.TEMPORAL_API_DIR}}"
+    cmds:
+      - npm install
+
+  # ============================================
+  # Development (Local)
+  # ============================================
+
+  dev:founder:
+    desc: Run Founder in development mode
+    dir: "{{.FOUNDER_DIR}}"
+    cmds:
+      - npm run dev
+
+  dev:fake-stripe:
+    desc: Run Fake Stripe in development mode
+    dir: "{{.FAKE_STRIPE_DIR}}"
+    cmds:
+      - npm run dev
+
+  dev:temporal-worker:
+    desc: Run Temporal Worker in development mode
+    dir: "{{.TEMPORAL_WORKER_DIR}}"
+    cmds:
+      - npm run dev
+
+  dev:temporal-api:
+    desc: Run Temporal API in development mode
+    dir: "{{.TEMPORAL_API_DIR}}"
+    cmds:
+      - npm run dev
+
+  # ============================================
+  # Build
+  # ============================================
+
+  build:
+    desc: Build all packages
+    cmds:
+      - task: build:founder
+      - task: build:temporal-worker
+      - task: build:temporal-api
+
+  build:founder:
+    desc: Build Founder
+    dir: "{{.FOUNDER_DIR}}"
+    cmds:
+      - npm run build
+
+  build:temporal-worker:
+    desc: Build Temporal Worker
+    dir: "{{.TEMPORAL_WORKER_DIR}}"
+    cmds:
+      - npm run build
+
+  build:temporal-api:
+    desc: Build Temporal API
+    dir: "{{.TEMPORAL_API_DIR}}"
+    cmds:
+      - npm run build
+
+  build:docker:
+    desc: Build Docker images
+    cmds:
+      - "{{.DOCKER_COMPOSE}} build"
+
+  # ============================================
+  # Testing & Health Checks
+  # ============================================
+
+  health:
+    desc: Check health of all services
+    cmds:
+      - echo "🏥 Checking service health..."
+      - echo ""
+      - echo "📡 Temporal API:"
+      - curl -s http://localhost:3002/health | jq || echo "❌ Not responding"
+      - echo ""
+      - echo "🏗️  Founder:"
+      - curl -s http://localhost:3000/health | jq || echo "❌ Not responding"
+      - echo ""
+      - echo "💳 Fake Stripe:"
+      - curl -s http://localhost:3001/payment/stats | jq || echo "❌ Not responding"
+
+  test:workflow:
+    desc: Test user context workflow (parallel)
+    cmds:
+      - echo "🚀 Starting user context workflow..."
+      - |
+        curl -X POST http://localhost:3002/api/v1/workflows/user-context \
+          -H "Content-Type: application/json" \
+          -d '{"strategy": "parallel", "correlationId": "test-{{now | date "20060102150405"}}"}' \
+          | jq
+
+  test:workflow:sequential:
+    desc: Test user context workflow (sequential)
+    cmds:
+      - echo "🚀 Starting user context workflow (sequential)..."
+      - |
+        curl -X POST http://localhost:3002/api/v1/workflows/user-context \
+          -H "Content-Type: application/json" \
+          -d '{"strategy": "sequential", "correlationId": "test-seq-{{now | date "20060102150405"}}"}' \
+          | jq
+
+  test:payment:
+    desc: Test payment workflow
+    cmds:
+      - echo "💳 Starting payment workflow..."
+      - |
+        curl -X POST http://localhost:3002/api/v1/workflows/payment \
+          -H "Content-Type: application/json" \
+          -d '{"amount": 1000, "currency": "usd", "source": "tok_visa", "description": "Test payment", "correlationId": "payment-{{now | date "20060102150405"}}"}' \
+          | jq
+
+  # ============================================
+  # Temporal UI & Management
+  # ============================================
+
+  ui:
+    desc: Open Temporal UI in browser
+    cmds:
+      - open http://localhost:8080 || xdg-open http://localhost:8080
+
+  ui:temporal-api:
+    desc: Open Temporal API Swagger UI
+    cmds:
+      - open http://localhost:3002/api/docs || xdg-open http://localhost:3002/api/docs
+
+  ui:founder:
+    desc: Open Founder Swagger UI
+    cmds:
+      - open http://localhost:3000/api/docs || xdg-open http://localhost:3000/api/docs
+
+  ui:fake-stripe:
+    desc: Open Fake Stripe Swagger UI
+    cmds:
+      - open http://localhost:3001/api/docs || xdg-open http://localhost:3001/api/docs
+
+  # ============================================
+  # Database & Cleanup
+  # ============================================
+
+  db:shell:
+    desc: Connect to Temporal PostgreSQL database
+    cmds:
+      - docker exec -it temporal-postgres psql -U temporal
+
+  db:reset:
+    desc: Reset Temporal database (WARNING: destroys all workflow history)
+    cmds:
+      - echo "⚠️  This will delete all workflow history. Press Ctrl+C to cancel..."
+      - sleep 5
+      - "{{.DOCKER_COMPOSE}} down -v"
+      - "{{.DOCKER_COMPOSE}} up -d temporal-postgres temporal"
+      - echo "✅ Database reset complete"
+
+  clean:
+    desc: Clean all build artifacts
+    cmds:
+      - rm -rf {{.FOUNDER_DIR}}/dist
+      - rm -rf {{.FOUNDER_DIR}}/node_modules
+      - rm -rf {{.FAKE_STRIPE_DIR}}/dist
+      - rm -rf {{.FAKE_STRIPE_DIR}}/node_modules
+      - rm -rf {{.TEMPORAL_WORKER_DIR}}/dist
+      - rm -rf {{.TEMPORAL_WORKER_DIR}}/node_modules
+      - rm -rf {{.TEMPORAL_API_DIR}}/dist
+      - rm -rf {{.TEMPORAL_API_DIR}}/node_modules
+      - echo "✅ All build artifacts cleaned"
+
+  clean:docker:
+    desc: Remove all Docker containers and volumes
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down -v --remove-orphans"
+      - echo "✅ Docker resources cleaned"
+
+  reset:
+    desc: Full reset (clean + remove Docker volumes + reinstall)
+    cmds:
+      - task: clean
+      - task: clean:docker
+      - task: install
+      - echo "✅ Full reset complete"
+
+  # ============================================
+  # Monitoring & Debugging
+  # ============================================
+
+  stats:
+    desc: Show Fake Stripe chaos statistics
+    cmds:
+      - curl -s http://localhost:3001/payment/stats | jq
+
+  stats:reset:
+    desc: Reset Fake Stripe statistics
+    cmds:
+      - curl -X POST http://localhost:3001/payment/stats/reset
+      - echo "✅ Statistics reset"
+
+  workflow:status:
+    desc: Get workflow status (usage: task workflow:status -- workflow-id)
+    cmds:
+      - curl -s http://localhost:3002/api/v1/workflows/{{.CLI_ARGS}}/status | jq
+
+  workflow:progress:
+    desc: Get workflow progress (usage: task workflow:progress -- workflow-id)
+    cmds:
+      - curl -s http://localhost:3002/api/v1/workflows/{{.CLI_ARGS}}/progress | jq
+
+  workflow:result:
+    desc: Get workflow result (usage: task workflow:result -- workflow-id)
+    cmds:
+      - curl -s http://localhost:3002/api/v1/workflows/{{.CLI_ARGS}}/result | jq
+
+  workflow:cancel:
+    desc: Cancel workflow (usage: task workflow:cancel -- workflow-id)
+    cmds:
+      - curl -X POST http://localhost:3002/api/v1/workflows/{{.CLI_ARGS}}/cancel | jq
+
+  workflow:history:
+    desc: Get workflow history (usage: task workflow:history -- workflow-id)
+    cmds:
+      - curl -s http://localhost:3002/api/v1/workflows/{{.CLI_ARGS}}/history | jq
+
+  # ============================================
+  # Documentation
+  # ============================================
+
+  docs:
+    desc: Open documentation index
+    cmds:
+      - echo "📚 Documentation:"
+      - echo ""
+      - echo "Architecture:"
+      - echo "  - docs/TEMPORAL_ARCHITECTURE.md"
+      - echo "  - CLAUDE.md"
+      - echo ""
+      - echo "Testing:"
+      - echo "  - docs/TESTING_GUIDE.md"
+      - echo "  - packages/temporal-api/requests.http"
+      - echo ""
+      - echo "READMEs:"
+      - echo "  - packages/founder/README.md"
+      - echo "  - packages/fake-stripe-chaos/README.md"
+      - echo "  - packages/temporal-worker/README.md"
+      - echo "  - packages/temporal-api/README.md"
+      - echo ""
+      - echo "Quick Reference:"
+      - echo "  - QUICKREF.md"
+      - echo "  - PHASE3_SUMMARY.md"
+
+  # ============================================
+  # Utility Commands
+  # ============================================
+
+  list:
+    desc: List all available tasks
+    cmds:
+      - task --list
+
+  default:
+    desc: Show help
+    cmds:
+      - task --list

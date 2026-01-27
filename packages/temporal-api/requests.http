@@ -1,0 +1,128 @@
+### Temporal API - Testing Endpoints
+### VS Code: Install "REST Client" extension to use this file
+
+@baseUrl = http://localhost:3002
+@workflowId = user-context-test-123
+
+### Health Check
+GET {{baseUrl}}/health
+
+### ============================================
+### User Context Workflows
+### ============================================
+
+### Start User Context Workflow (Parallel Strategy - Default)
+POST {{baseUrl}}/api/v1/workflows/user-context
+Content-Type: application/json
+
+{
+  "strategy": "parallel",
+  "correlationId": "test-parallel-001"
+}
+
+### Start User Context Workflow (Sequential Strategy)
+POST {{baseUrl}}/api/v1/workflows/user-context
+Content-Type: application/json
+
+{
+  "strategy": "sequential",
+  "correlationId": "test-sequential-001"
+}
+
+### Get Workflow Status
+GET {{baseUrl}}/api/v1/workflows/user-context-test-parallel-001/status
+
+### Get Workflow Progress (Real-time)
+GET {{baseUrl}}/api/v1/workflows/user-context-test-parallel-001/progress
+
+### Get Workflow Result (Waits for completion)
+GET {{baseUrl}}/api/v1/workflows/user-context-test-parallel-001/result
+
+### Cancel Workflow
+POST {{baseUrl}}/api/v1/workflows/user-context-test-parallel-001/cancel
+
+### Get Workflow History
+GET {{baseUrl}}/api/v1/workflows/user-context-test-parallel-001/history
+
+### ============================================
+### Payment Workflows (Saga Pattern)
+### ============================================
+
+### Start Payment Workflow (Success Scenario)
+POST {{baseUrl}}/api/v1/workflows/payment
+Content-Type: application/json
+
+{
+  "amount": 1000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Test payment - success scenario",
+  "correlationId": "payment-test-001"
+}
+
+### Start Payment Workflow (Large Amount - May Fail)
+POST {{baseUrl}}/api/v1/workflows/payment
+Content-Type: application/json
+
+{
+  "amount": 50000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Test payment - chaos engineering",
+  "correlationId": "payment-chaos-001"
+}
+
+### Get Payment Workflow Status
+GET {{baseUrl}}/api/v1/workflows/payment-payment-test-001/status
+
+### Get Payment Workflow Progress
+GET {{baseUrl}}/api/v1/workflows/payment-payment-test-001/progress
+
+### Get Payment Workflow Result
+GET {{baseUrl}}/api/v1/workflows/payment-payment-test-001/result
+
+### Cancel Payment Workflow
+POST {{baseUrl}}/api/v1/workflows/payment-payment-test-001/cancel
+
+### ============================================
+### End-to-End Testing Scenarios
+### ============================================
+
+### Scenario 1: Successful User Context Aggregation
+POST {{baseUrl}}/api/v1/workflows/user-context
+Content-Type: application/json
+
+{
+  "strategy": "parallel",
+  "correlationId": "e2e-success-001"
+}
+
+### Wait 3 seconds, then check result
+# GET {{baseUrl}}/api/v1/workflows/user-context-e2e-success-001/result
+
+### Scenario 2: Workflow Cancellation
+POST {{baseUrl}}/api/v1/workflows/user-context
+Content-Type: application/json
+
+{
+  "strategy": "sequential",
+  "correlationId": "e2e-cancel-001"
+}
+
+### Immediately cancel (while workflow is running)
+# POST {{baseUrl}}/api/v1/workflows/user-context-e2e-cancel-001/cancel
+
+### Scenario 3: Payment with Retry
+POST {{baseUrl}}/api/v1/workflows/payment
+Content-Type: application/json
+
+{
+  "amount": 2500,
+  "currency": "usd",
+  "source": "tok_mastercard",
+  "description": "E2E test - payment with retry",
+  "correlationId": "e2e-payment-retry-001"
+}
+
+### Track payment progress (poll this every 2 seconds)
+# GET {{baseUrl}}/api/v1/workflows/payment-e2e-payment-retry-001/progress

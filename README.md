@@ -2,44 +2,151 @@
 
 A comprehensive learning project demonstrating evolutionary architecture: from simple aggregator to Temporal-orchestrated microservices with chaos engineering.
 
-> 📋 **Current Phase**: Phase 0 - Cleanup & Setup ✅
-> See [CLAUDE.md](./CLAUDE.md) for detailed implementation plan
+> 📋 **Current Phase**: Phase 3 - Temporal Orchestration ✅
+> See [CLAUDE.md](./CLAUDE.md) for detailed documentation
+
+## Quick Start
+
+### Using Task (Recommended)
+
+```bash
+# Install Task: https://taskfile.dev/installation/
+brew install go-task
+
+# Start all services
+task up
+
+# Check service health
+task health
+
+# Test a workflow
+task test:workflow
+
+# Open Temporal UI
+task ui
+
+# View all commands
+task --list
+```
+
+See [TASKFILE_README.md](./TASKFILE_README.md) for complete guide.
+
+### Using Docker Compose
+
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+## Service URLs
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Temporal API | http://localhost:3002/api/docs | REST API for workflows (Swagger) |
+| Temporal UI | http://localhost:8080 | Workflow visibility & debugging |
+| Founder API | http://localhost:3000/api/docs | Legacy REST API (Swagger) |
+| Fake Stripe | http://localhost:3001/api/docs | Chaos payment service (Swagger) |
 
 ## Project Vision
 
 This project evolves through 5 distinct phases, each building on the previous:
 
 ```
-Phase 0: Cleanup       →  Phase 1: Aggregator    →  Phase 2: Chaos         →  Phase 3: Temporal      →  Phase 4: Observability
-(Monorepo Setup)          (Hexagonal Arch)          (Microservices)           (Workflows)               (Testing + Logging)
+Phase 1: Aggregator    →  Phase 2: Chaos         →  Phase 3: Temporal      →  Phase 4: Observability  →  Phase 5: Production
+(Hexagonal Arch)          (Microservices)           (Workflows) ✅             (Testing + Logging)         (Cloud Deploy)
 ```
 
-### Phase Overview
+### Completed Phases
 
-| Phase | Goal | Architecture | Key Tech |
-|-------|------|--------------|----------|
-| **0** | Monorepo setup | Clean slate | npm workspaces |
-| **1** | API aggregator | Hexagonal | NestJS + 3 external APIs |
-| **2** | Add payment service | Microservices | Fake Stripe + Chaos Engine |
-| **3** | Workflow orchestration | Temporal Workers | Temporal SDK + Activities |
-| **4** | Production-ready | Full observability | Pino + Correlation IDs + E2E tests |
+| Phase | Status | Goal | Key Tech |
+|-------|--------|------|----------|
+| **1** | ✅ | API aggregator with hexagonal architecture | NestJS + 3 external APIs |
+| **2** | ✅ | Add payment service with chaos engineering | Fake Stripe + Chaos Engine |
+| **3** | ✅ | Workflow orchestration with durability | Temporal + Activities + Saga |
+| **4** | 🔜 | Production observability | Pino + E2E tests + Metrics |
+| **5** | 📋 | Cloud deployment | Kubernetes + CI/CD |
+
+## What's Built
+
+### Phase 1: Founder Service (Port 3000)
+Production-ready API aggregator with hexagonal architecture.
+
+**Features:**
+- Hexagonal architecture (Domain/Application/Infrastructure/Presentation)
+- NestJS + Strategy Pattern (3 concurrency strategies)
+- HttpService with interceptors (logging, retry, correlation ID)
+- Swagger/OpenAPI documentation
+
+**Endpoints:**
+- `GET /api/v1/user-context?strategy=promise-allsettled`
+- `GET /health`
+
+### Phase 2: Fake Stripe Chaos (Port 3001)
+Chaos engineering payment service for resilience testing.
+
+**Features:**
+- Chaos Engine (40% success, 30% timeout, 20% error500, 10% error402)
+- Statistics tracking + request history
+- Correlation ID support
+
+**Endpoints:**
+- `POST /payment/charge`
+- `GET /payment/stats`
+
+### Phase 3: Temporal Orchestration (Ports 3002, 7233, 8080)
+Durable workflow orchestration with automatic retry and Saga pattern.
+
+**Components:**
+- **Temporal Server** (7233) - Workflow orchestration engine
+- **Temporal UI** (8080) - Workflow visibility
+- **Temporal Worker** - Executes workflows and activities
+- **Temporal API** (3002) - REST API for workflow management
+- **PostgreSQL** (5432) - Temporal persistence
+
+**Features:**
+- Durable execution (survives crashes)
+- Automatic retry with exponential backoff
+- Saga pattern for payment compensation
+- Signals for workflow cancellation
+- Queries for real-time progress tracking
+- Full workflow history in Temporal UI
+
+**Workflows:**
+- `userContextWorkflow` - Aggregate location, weather, cat fact (parallel/sequential)
+- `paymentWorkflow` - Process payment with Saga compensation
+
+**Temporal API Endpoints:**
+- `POST /api/v1/workflows/user-context`
+- `POST /api/v1/workflows/payment`
+- `GET /api/v1/workflows/:id/status`
+- `GET /api/v1/workflows/:id/progress`
+- `GET /api/v1/workflows/:id/result`
+- `POST /api/v1/workflows/:id/cancel`
+- `GET /api/v1/workflows/:id/history`
 
 ## Tech Stack
 
-- **NestJS** - TypeScript framework for microservices
-- **Temporal** - Workflow orchestration (Phase 3+)
-- **Docker** - Containerization and service orchestration
-- **Axios** - HTTP client for external APIs
-- **RxJS** - Reactive programming (Phase 1)
-- **Pino** - Structured logging (Phase 4)
-- **Jest** - Testing framework (Phase 4)
-- **Swagger/OpenAPI** - API documentation (All phases)
+- **TypeScript** - Type-safe development
+- **NestJS** - Microservices framework
+- **Temporal** - Workflow orchestration
+- **Docker** - Containerization
+- **PostgreSQL** - Temporal persistence
+- **Axios** - HTTP client
+- **RxJS** - Reactive programming
+- **Swagger/OpenAPI** - API documentation
 
 ## Prerequisites
 
-- Node.js >= 18.0.0
+- Node.js >= 20.0.0
 - Docker and Docker Compose
-- npm (workspaces support)
+- Task (optional but recommended): https://taskfile.dev/installation/
+- jq (optional, for JSON formatting): `brew install jq`
 - VS Code with REST Client extension (optional)
 
 ## Monorepo Structure
@@ -48,201 +155,148 @@ Phase 0: Cleanup       →  Phase 1: Aggregator    →  Phase 2: Chaos         �
 fake-stripe/
 ├── packages/
 │   ├── founder/                    # Phase 1: User context aggregator
-│   ├── fake-stripe-chaos/          # Phase 2: Payment service with chaos
-│   └── temporal-orchestrator/      # Phase 3: Temporal workflows
-├── requests.http                   # REST Client file (all API calls)
-├── docker-compose.yml              # Evolves with each phase
-├── package.json                    # Root workspace config
-├── tsconfig.json                   # Shared TypeScript config
-├── CLAUDE.md                       # Implementation guide for Claude Code
-├── PROJECT_STATUS.md               # Current phase tracking
+│   ├── fake-stripe-chaos/          # Phase 2: Payment with chaos
+│   ├── temporal-worker/            # Phase 3: Temporal Worker
+│   └── temporal-api/               # Phase 3: Temporal REST API
+├── docs/
+│   ├── TEMPORAL_ARCHITECTURE.md    # Complete architecture guide
+│   └── TESTING_GUIDE.md            # Comprehensive testing guide
+├── docker-compose.yml              # All services orchestration
+├── Taskfile.yml                    # Task commands
+├── TASKFILE_README.md              # Task usage guide
+├── QUICKREF.md                     # Quick reference
+├── PHASE3_SUMMARY.md               # Phase 3 implementation summary
+├── CLAUDE.md                       # Project guidance
 └── README.md                       # This file
 ```
 
-## Quick Start (Phase 0 - Current)
-
-### 1. Install Dependencies
-
-```bash
-npm install
-```
-
-### 2. Project Status
-
-Currently in **Phase 0** - monorepo structure ready for Phase 1 implementation.
-
-**Next steps:**
-- Implement Phase 1: Founder service (API aggregator)
-- See [CLAUDE.md](./CLAUDE.md) for detailed implementation plan
-
-## REST Client Usage
-
-This project includes a `requests.http` file for manual API testing via VS Code's REST Client extension.
-
-**Setup:**
-1. Install [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension
-2. Open `requests.http` in VS Code
-3. Click "Send Request" above each `###` separator
-4. View responses in sidebar
-
-**Benefits:**
-- No Postman needed
-- Version controlled with code
-- Easy to share and reproduce API calls
-
-## Phase Details
-
-### Phase 1: Founder - User Context Aggregator
-
-**Goal:** Build a production-grade API aggregator using hexagonal architecture
-
-**Features:**
-- Aggregates data from 3 external APIs (Location + Weather + Cat Facts)
-- 3 concurrency strategies: Promise.allSettled, RxJS, Async Sequential
-- Hexagonal architecture (Ports & Adapters)
-- Swagger documentation
-- Docker deployment
-
-**Endpoints:**
-- `GET /api/v1/user-context?strategy=promise-allsettled`
-- `GET /health`
-
-**Status:** 🔜 Pending
-
----
-
-### Phase 2: Fake Stripe with Chaos Engineering
-
-**Goal:** Add second microservice simulating payment gateway with controlled failures
-
-**Features:**
-- Chaos Engine: 40% success, 30% timeout, 20% error 500, 10% error 402
-- Payment processing simulation
-- Founder integration for premium features
-- Statistics endpoint
-
-**Endpoints:**
-- `POST /payment/charge`
-- `GET /payment/stats`
-- `GET /api/v1/user-context-premium` (Founder)
-
-**Status:** 📋 Planned
-
----
-
-### Phase 3: Temporal Orchestration
-
-**Goal:** Refactor to Temporal workflows with durable execution
-
-**Features:**
-- Migrate Founder adapters → Temporal Activities
-- Workflow-based orchestration
-- Saga pattern with compensations
-- Signals & Queries for real-time control
-- Temporal UI for workflow visibility
-
-**Components:**
-- Temporal Server + PostgreSQL (Docker)
-- Temporal Worker (ex-Founder logic)
-- Temporal Client API (REST endpoints)
-
-**Endpoints:**
-- `POST /workflows/user-context`
-- `GET /workflows/:id/status`
-- `POST /workflows/:id/cancel`
-
-**Status:** 📋 Planned
-
----
-
-### Phase 4: Production Observability
-
-**Goal:** Add comprehensive testing and observability
-
-**Features:**
-- E2E automated tests (Jest + Supertest)
-- Structured logging with Pino
-- Correlation IDs across services
-- Optional: Grafana + Loki for log aggregation
-- Full request traceability
-
-**Test Coverage:**
-- Founder: User context aggregation
-- Fake Stripe: Chaos distribution validation
-- Temporal: Workflow execution and compensations
-
-**Status:** 📋 Planned
-
 ## Development Workflow
 
-### Phase 1 (When implemented)
+### 1. Start Services
 
 ```bash
-# Start Founder service
-docker-compose up -d founder
+# Using Task (recommended)
+task up
 
-# View logs
-docker-compose logs -f founder
-
-# Test with REST Client
-# Open requests.http and click "Send Request"
-```
-
-### Phase 2 (Future)
-
-```bash
-# Start both services
-docker-compose up -d founder fake-stripe-chaos
-
-# Test premium endpoint
-curl http://localhost:3000/api/v1/user-context-premium
-```
-
-### Phase 3 (Future)
-
-```bash
-# Start full stack
+# Or using Docker Compose
 docker-compose up -d
-
-# Open Temporal UI
-open http://localhost:8080
-
-# Start workflow via API
-curl -X POST http://localhost:3002/workflows/user-context \
-  -H "Content-Type: application/json" \
-  -d '{"premium": true}'
 ```
 
-## Learning Objectives
+### 2. Verify Health
 
-By completing all phases, you'll learn:
+```bash
+# Using Task
+task health
 
-1. **Hexagonal Architecture** - Clean separation of domain, application, and infrastructure
-2. **Concurrency Patterns** - Promise.allSettled, RxJS, async/await strategies
-3. **Chaos Engineering** - Controlled failure simulation and resilience
-4. **Microservices** - HTTP communication, service boundaries, retry logic
-5. **Temporal Workflows** - Durable execution, activities, signals, queries
-6. **Saga Pattern** - Distributed transactions with compensations
-7. **Observability** - Structured logging, correlation IDs, distributed tracing
-8. **Testing** - E2E testing strategies for microservices
+# Or manually
+curl http://localhost:3002/health
+curl http://localhost:3000/health
+curl http://localhost:3001/payment/stats
+```
+
+### 3. Test Workflows
+
+```bash
+# Using Task
+task test:workflow              # Parallel strategy
+task test:workflow:sequential   # Sequential strategy
+task test:payment              # Payment workflow
+
+# Or using curl (see packages/temporal-api/requests.http)
+```
+
+### 4. Monitor in Temporal UI
+
+```bash
+# Using Task
+task ui
+
+# Or manually
+open http://localhost:8080
+```
+
+### 5. View Logs
+
+```bash
+# Using Task
+task logs:temporal-worker
+task logs:temporal-api
+task logs:founder
+
+# Or using Docker Compose
+docker-compose logs -f temporal-worker
+```
+
+## Common Tasks
+
+### Development
+
+```bash
+task install                  # Install all dependencies
+task dev:temporal-worker      # Run Worker locally
+task dev:temporal-api         # Run API locally
+task build                    # Build all packages
+```
+
+### Testing
+
+```bash
+task test:workflow            # Test user context workflow
+task test:payment             # Test payment workflow
+task health                   # Check all services
+```
+
+### Workflow Management
+
+```bash
+# Get workflow status
+task workflow:status -- user-context-abc123
+
+# Get workflow progress
+task workflow:progress -- user-context-abc123
+
+# Get workflow result
+task workflow:result -- user-context-abc123
+
+# Cancel workflow
+task workflow:cancel -- user-context-abc123
+```
+
+### Monitoring
+
+```bash
+task stats                    # View Fake Stripe chaos stats
+task logs:temporal-worker     # View Worker logs
+task ui                       # Open Temporal UI
+```
+
+### Cleanup
+
+```bash
+task down                     # Stop all services
+task clean                    # Remove build artifacts
+task clean:docker             # Remove Docker volumes
+task reset                    # Full reset
+```
 
 ## Architecture Evolution
 
 ### Phase 1: Simple Aggregator
 ```
-Client → NestJS API → [IPApi, Weather, CatFact] (parallel)
+Client → Founder (NestJS) → [IPApi, Weather, CatFact]
+         └─ Manual retry via HttpRetryInterceptor
 ```
 
 ### Phase 2: Microservices
 ```
 Client → Founder → External APIs
               ↓
-         Fake Stripe (with chaos)
+         Fake Stripe (chaos)
 ```
 
-### Phase 3: Temporal Orchestration
+### Phase 3: Temporal Orchestration ✅
 ```
-Client → Temporal Client API
+Client → Temporal API (REST)
               ↓
          Temporal Server
               ↓
@@ -251,42 +305,165 @@ Client → Temporal Client API
          [External APIs, Fake Stripe]
 ```
 
+**Benefits:**
+- Durable execution (survives crashes)
+- Automatic retry with backoff
+- Saga pattern for compensations
+- Full workflow history
+- Real-time progress tracking
+
 ## External APIs Used
 
 | API | Purpose | Authentication | Phase |
 |-----|---------|----------------|-------|
 | [IPApi](https://ipapi.co/) | Geolocation | None | 1 |
-| [OpenWeatherMap](https://openweathermap.org/api) | Weather data | API Key (hardcoded) | 1 |
+| [OpenWeatherMap](https://openweathermap.org/api) | Weather data | API Key | 1 |
 | [Cat Facts](https://catfact.ninja/) | Entertainment | None | 1 |
 | Fake Stripe | Payment simulation | Internal | 2 |
 
-## Configuration
+## Testing
 
-Each package has its own `.env` file. Example:
+### Manual Testing
+
+Use the REST Client extension in VS Code:
+
+1. Install [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client)
+2. Open `packages/temporal-api/requests.http`
+3. Click "Send Request" above each request
+
+### Automated Testing
 
 ```bash
-# packages/founder/.env
-NODE_ENV=development
-PORT=3000
-OPENWEATHER_API_KEY=your_dev_key_here
-AGGREGATION_STRATEGY=promise-allsettled
+# Test workflows
+task test:workflow
+task test:workflow:sequential
+task test:payment
+
+# Check service health
+task health
+
+# View workflow in UI
+task ui
 ```
+
+See [docs/TESTING_GUIDE.md](./docs/TESTING_GUIDE.md) for comprehensive testing scenarios.
 
 ## Documentation
 
-- **CLAUDE.md** - Detailed implementation guide for each phase
-- **PROJECT_STATUS.md** - Current progress and phase checklist
-- **requests.http** - All API endpoints with examples
-- **Swagger UI** - Auto-generated API docs (per service)
+- **[CLAUDE.md](./CLAUDE.md)** - Complete project guidance
+- **[TASKFILE_README.md](./TASKFILE_README.md)** - Task commands guide
+- **[QUICKREF.md](./QUICKREF.md)** - Quick reference
+- **[PHASE3_SUMMARY.md](./PHASE3_SUMMARY.md)** - Phase 3 implementation summary
+- **[docs/TEMPORAL_ARCHITECTURE.md](./docs/TEMPORAL_ARCHITECTURE.md)** - Complete architecture
+- **[docs/TESTING_GUIDE.md](./docs/TESTING_GUIDE.md)** - Testing guide
+- **packages/*/README.md** - Individual service documentation
 
-## Contributing
+## Learning Objectives
 
-This is a learning project. To implement the next phase:
+By exploring this project, you'll learn:
 
-1. Read [CLAUDE.md](./CLAUDE.md) for the phase plan
-2. Check [PROJECT_STATUS.md](./PROJECT_STATUS.md) for current phase
-3. Follow the architecture and patterns established
-4. Update documentation as you go
+1. **Hexagonal Architecture** - Clean separation of domain, application, and infrastructure
+2. **Concurrency Patterns** - Promise.allSettled, RxJS, async/await strategies
+3. **Chaos Engineering** - Controlled failure simulation and resilience
+4. **Microservices** - HTTP communication, service boundaries, retry logic
+5. **Temporal Workflows** - Durable execution, activities, signals, queries
+6. **Saga Pattern** - Distributed transactions with compensations
+7. **Observability** - Structured logging, correlation IDs, distributed tracing
+
+## Key Patterns Demonstrated
+
+### 1. Hexagonal Architecture (Ports & Adapters)
+```typescript
+Domain (pure logic)
+  ↓ uses
+Ports (interfaces)
+  ↓ implemented by
+Adapters (external integrations)
+```
+
+### 2. Strategy Pattern
+```typescript
+// Choose execution strategy at runtime
+strategy: 'parallel' | 'sequential'
+```
+
+### 3. Saga Pattern
+```typescript
+try {
+  await processPayment()
+} catch (error) {
+  await compensatePayment()  // Rollback
+}
+```
+
+### 4. Retry with Exponential Backoff
+```typescript
+retry: {
+  initialInterval: '1s',
+  backoffCoefficient: 2,
+  maximumAttempts: 3
+}
+```
+
+### 5. Partial Failure Handling
+```typescript
+// Return null for failed services, continue with others
+return {
+  location: loc || null,
+  weather: weather || null,
+  catFact: catFact || null
+}
+```
+
+## Troubleshooting
+
+### Services not starting
+```bash
+# Check Docker
+docker ps
+
+# View logs
+task logs
+
+# Restart services
+task restart
+```
+
+### Workflow stuck
+```bash
+# Check Worker logs
+task logs:temporal-worker
+
+# View in Temporal UI
+task ui
+
+# Cancel workflow
+task workflow:cancel -- {workflowId}
+```
+
+### Database issues
+```bash
+# Reset database (WARNING: destroys workflow history)
+task db:reset
+```
+
+See [docs/TESTING_GUIDE.md](./docs/TESTING_GUIDE.md#troubleshooting) for more.
+
+## Next Steps (Future Phases)
+
+### Phase 4: Production Observability
+- E2E automated tests (Jest + Supertest)
+- Structured logging with Pino
+- Prometheus metrics
+- Grafana dashboards
+- Distributed tracing
+
+### Phase 5: Cloud Deployment
+- Kubernetes manifests
+- CI/CD pipeline (GitHub Actions)
+- Production-ready configuration
+- Auto-scaling
+- Monitoring & alerting
 
 ## Resources
 
@@ -295,6 +472,15 @@ This is a learning project. To implement the next phase:
 - [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/)
 - [Saga Pattern](https://microservices.io/patterns/data/saga.html)
 - [Chaos Engineering](https://principlesofchaos.org/)
+- [Task Documentation](https://taskfile.dev/)
+
+## Contributing
+
+This is a learning project. Feel free to:
+- Explore the code and architecture
+- Run the services and test workflows
+- Read the documentation
+- Suggest improvements
 
 ## License
 
