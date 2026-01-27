@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Founder Service - User Context Aggregator (Phase 1)
+  founder:
+    build: ./packages/founder
+    container_name: founder-service
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - OPENWEATHER_API_KEY=904c250dea7da952f578aad2312c65e5
+      - AGGREGATION_STRATEGY=promise-allsettled
+      - FAKE_STRIPE_URL=http://fake-stripe-chaos:3001
+    depends_on:
+      - fake-stripe-chaos
+    networks:
+      - fake-stripe-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Fake Stripe Chaos - Payment Service with Chaos Engineering (Phase 2)
+  fake-stripe-chaos:
+    build: ./packages/fake-stripe-chaos
+    container_name: fake-stripe-chaos-service
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    networks:
+      - fake-stripe-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/payment/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+networks:
+  fake-stripe-network:
+    driver: bridge

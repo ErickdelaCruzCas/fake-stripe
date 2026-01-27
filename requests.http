@@ -1,0 +1,200 @@
+# requests.http - Fase 1: Founder Endpoints
+# REST Client configuration for fake-stripe project
+# Install VS Code extension: humao.rest-client
+
+### Variables
+@founderUrl = http://localhost:3000
+
+###############################################
+# FASE 1: Founder - User Context Aggregator
+###############################################
+
+### Health Check
+GET {{founderUrl}}/health
+Content-Type: application/json
+
+###
+
+### Get User Context - Default Strategy (Promise.allSettled)
+GET {{founderUrl}}/api/v1/user-context
+Content-Type: application/json
+
+###
+
+### Get User Context - RxJS Strategy
+GET {{founderUrl}}/api/v1/user-context?strategy=rxjs
+Content-Type: application/json
+
+###
+
+### Get User Context - Sequential Strategy (for performance comparison)
+GET {{founderUrl}}/api/v1/user-context?strategy=async-sequential
+Content-Type: application/json
+
+###
+
+### Expected Response (200 OK):
+# {
+#   "location": {
+#     "ip": "203.0.113.42",
+#     "city": "San Francisco",
+#     "region": "California",
+#     "country": "US",
+#     "latitude": 37.7749,
+#     "longitude": -122.4194,
+#     "timezone": "America/Los_Angeles"
+#   },
+#   "weather": {
+#     "description": "Clear sky",
+#     "temperature": 18.5,
+#     "feelsLike": 17.2,
+#     "humidity": 65,
+#     "windSpeed": 3.5
+#   },
+#   "entertainment": {
+#     "catFact": "Cats sleep 70% of their lives.",
+#     "source": "catfact.ninja"
+#   },
+#   "aggregatedAt": "2024-01-26T10:30:00.000Z",
+#   "processingTimeMs": 450,
+#   "strategyUsed": "promise-allsettled"
+# }
+
+###
+
+###############################################
+# CORRELATION ID EXAMPLES
+###############################################
+
+### Get User Context with Custom Correlation ID
+# Útil para testing: puedes buscar logs por este ID específico
+GET {{founderUrl}}/api/v1/user-context
+Content-Type: application/json
+x-correlation-id: my-custom-test-id-123
+
+###
+
+### Get User Context with Auto-Generated Correlation ID
+# El servidor generará un UUID automáticamente
+# Busca el header x-correlation-id en la respuesta
+GET {{founderUrl}}/api/v1/user-context
+Content-Type: application/json
+
+###
+
+### Tips para Correlation ID:
+# 1. El response incluye el header: x-correlation-id
+# 2. Usa ese ID para buscar en logs: npm run dev 2>&1 | grep "correlation-id-aqui"
+# 3. Todos los logs relacionados con ese request tendrán el mismo correlation ID
+# 4. Puedes enviar tu propio correlation ID desde el cliente (útil para debugging)
+
+###
+
+###############################################
+# FASE 2: FAKE STRIPE CHAOS ENGINEERING
+###############################################
+
+### Variables for Fake Stripe
+@fakeStripeUrl = http://localhost:3001
+
+### Process Payment Charge (40% success, 30% timeout, 20% error500, 10% error402)
+POST {{fakeStripeUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 1000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Test payment for chaos engineering"
+}
+
+###
+
+### Process Payment with Custom Correlation ID
+POST {{fakeStripeUrl}}/payment/charge
+Content-Type: application/json
+x-correlation-id: test-payment-123
+
+{
+  "amount": 2500,
+  "currency": "usd",
+  "source": "tok_mastercard",
+  "description": "Premium user context subscription"
+}
+
+###
+
+### Get Payment Statistics
+# Shows distribution of chaos scenarios (success/timeout/error500/error402)
+GET {{fakeStripeUrl}}/payment/stats
+Content-Type: application/json
+
+###
+
+### Get Recent Requests (last 10)
+GET {{fakeStripeUrl}}/payment/stats/recent
+Content-Type: application/json
+
+###
+
+### Get Recent Requests (last 20)
+GET {{fakeStripeUrl}}/payment/stats/recent?limit=20
+Content-Type: application/json
+
+###
+
+### Reset Statistics
+POST {{fakeStripeUrl}}/payment/stats/reset
+Content-Type: application/json
+
+###
+
+### Expected Responses:
+
+# Success (40% probability) - HTTP 200
+# {
+#   "success": true,
+#   "chargeId": "ch_1234567890abcdef",
+#   "amount": 1000,
+#   "currency": "usd",
+#   "status": "succeeded",
+#   "createdAt": "2024-01-26T10:30:00.000Z",
+#   "description": "Test payment"
+# }
+
+# Timeout (30% probability) - HTTP 408 (after 5s delay)
+# {
+#   "success": false,
+#   "error": "timeout",
+#   "message": "Payment service timeout - request took too long to process"
+# }
+
+# Internal Error (20% probability) - HTTP 500
+# {
+#   "success": false,
+#   "error": "internal_error",
+#   "message": "An internal error occurred while processing payment"
+# }
+
+# Insufficient Funds (10% probability) - HTTP 402
+# {
+#   "success": false,
+#   "error": "insufficient_funds",
+#   "message": "The card has insufficient funds to complete this transaction"
+# }
+
+###
+
+### Test Multiple Payments (execute 10 times to see distribution)
+# Tip: Click "Send Request" multiple times or use a loop script
+# Expected distribution: ~4 success, ~3 timeouts, ~2 error500, ~1 error402
+
+###
+
+### Swagger UI - Fake Stripe
+# Open in browser: {{fakeStripeUrl}}/api/docs
+
+###
+
+### Swagger UI - Founder
+# Open in browser: {{founderUrl}}/api/docs

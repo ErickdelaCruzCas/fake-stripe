@@ -1,0 +1,421 @@
+# Fake Stripe - Chaos Payment Service
+# REST Client configuration for testing payment endpoints
+# Install VS Code extension: humao.rest-client
+
+### Variables
+@baseUrl = http://localhost:3001
+@correlationId = test-{{$timestamp}}
+
+###############################################
+# PAYMENT ENDPOINTS
+###############################################
+
+### 1. Process Payment Charge - Basic
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 1000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Basic test payment"
+}
+
+###
+
+### 2. Process Payment Charge - With Custom Correlation ID
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+x-correlation-id: {{correlationId}}
+
+{
+  "amount": 2500,
+  "currency": "usd",
+  "source": "tok_mastercard",
+  "description": "Payment with correlation ID tracking"
+}
+
+###
+
+### 3. Process Payment Charge - Premium Amount
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 5000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Premium user context subscription"
+}
+
+###
+
+### 4. Process Payment Charge - Small Amount
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 100,
+  "currency": "usd",
+  "source": "tok_amex",
+  "description": "Small test charge - $1.00"
+}
+
+###
+
+###############################################
+# STATISTICS ENDPOINTS
+###############################################
+
+### 5. Get Payment Statistics
+# Shows distribution of chaos scenarios
+GET {{baseUrl}}/payment/stats
+Content-Type: application/json
+
+###
+
+### 6. Get Recent Requests (Default: 10)
+GET {{baseUrl}}/payment/stats/recent
+Content-Type: application/json
+
+###
+
+### 7. Get Recent Requests (Last 20)
+GET {{baseUrl}}/payment/stats/recent?limit=20
+Content-Type: application/json
+
+###
+
+### 8. Get Recent Requests (Last 50)
+GET {{baseUrl}}/payment/stats/recent?limit=50
+Content-Type: application/json
+
+###
+
+### 9. Reset Statistics
+POST {{baseUrl}}/payment/stats/reset
+Content-Type: application/json
+
+###
+
+###############################################
+# CHAOS TESTING SCENARIOS
+###############################################
+
+### 10. Test Multiple Payments (Execute 10 times manually)
+# Click "Send Request" multiple times to see different chaos scenarios
+# Expected distribution: ~4 success, ~3 timeouts, ~2 errors (500), ~1 error (402)
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+x-correlation-id: batch-test-{{$timestamp}}
+
+{
+  "amount": 1000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Batch test payment #{{$randomInt}}"
+}
+
+###
+
+### 11. High Value Payment Test
+# Test chaos with high value transactions
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 50000,
+  "currency": "usd",
+  "source": "tok_visa_debit",
+  "description": "High value transaction - $500.00"
+}
+
+###
+
+### 12. EUR Currency Test
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 1500,
+  "currency": "eur",
+  "source": "tok_mastercard",
+  "description": "European payment test"
+}
+
+###
+
+###############################################
+# EXPECTED RESPONSES
+###############################################
+
+# SUCCESS (40% probability) - HTTP 200
+# {
+#   "success": true,
+#   "chargeId": "ch_1234567890abcdef",
+#   "amount": 1000,
+#   "currency": "usd",
+#   "status": "succeeded",
+#   "createdAt": "2024-01-26T10:30:00.000Z",
+#   "description": "Test payment"
+# }
+
+###
+
+# TIMEOUT (30% probability) - HTTP 408
+# Wait: 5 seconds delay before response
+# {
+#   "success": false,
+#   "error": "timeout",
+#   "message": "Payment service timeout - request took too long to process"
+# }
+
+###
+
+# INTERNAL ERROR (20% probability) - HTTP 500
+# {
+#   "success": false,
+#   "error": "internal_error",
+#   "message": "An internal error occurred while processing payment"
+# }
+
+###
+
+# INSUFFICIENT FUNDS (10% probability) - HTTP 402
+# {
+#   "success": false,
+#   "error": "insufficient_funds",
+#   "message": "The card has insufficient funds to complete this transaction"
+# }
+
+###
+
+###############################################
+# TESTING WORKFLOWS
+###############################################
+
+### Workflow 1: Fresh Start
+# 1. Reset stats
+# 2. Execute 20 payments
+# 3. Check distribution
+
+###
+
+### Step 1: Reset Statistics
+POST {{baseUrl}}/payment/stats/reset
+
+###
+
+### Step 2: Execute Payment (Repeat 20 times)
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 1000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Workflow test payment"
+}
+
+###
+
+### Step 3: Verify Distribution
+GET {{baseUrl}}/payment/stats
+
+###
+
+### Expected Stats After 20 Requests:
+# {
+#   "totalRequests": 20,
+#   "successful": ~8,     // 40%
+#   "timeouts": ~6,       // 30%
+#   "errors500": ~4,      // 20%
+#   "errors402": ~2,      // 10%
+#   "successRate": "~0.40",
+#   "distribution": {
+#     "timeout": "~30.0%",
+#     "error500": "~20.0%",
+#     "error402": "~10.0%",
+#     "success": "~40.0%"
+#   }
+# }
+
+###
+
+###############################################
+# PERFORMANCE TESTING
+###############################################
+
+### Test 1: Response Time (Success Scenario)
+# Expected: < 100ms
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 100,
+  "currency": "usd",
+  "source": "tok_visa"
+}
+
+###
+
+### Test 2: Timeout Scenario Detection
+# If you get 408, it took ~5 seconds
+# If you get 200, it was < 100ms
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 500,
+  "currency": "usd",
+  "source": "tok_visa"
+}
+
+###
+
+###############################################
+# CORRELATION ID TRACKING
+###############################################
+
+### Payment 1 - Track with Custom ID
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+x-correlation-id: payment-flow-001
+
+{
+  "amount": 1000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "First payment in flow"
+}
+
+###
+
+### Payment 2 - Same Flow, Different ID
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+x-correlation-id: payment-flow-002
+
+{
+  "amount": 2000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Second payment in flow"
+}
+
+###
+
+### Check Logs for Correlation
+# In terminal: npm run dev 2>&1 | grep "payment-flow-001"
+# You should see all logs for that specific payment
+
+###
+
+###############################################
+# VALIDATION ERRORS
+###############################################
+
+### Invalid Amount (Should fail validation - 400)
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": -100,
+  "currency": "usd",
+  "source": "tok_visa"
+}
+
+###
+
+### Missing Required Field (Should fail validation - 400)
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 1000,
+  "currency": "usd"
+}
+
+###
+
+### Invalid Amount Type (Should fail validation - 400)
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": "not-a-number",
+  "currency": "usd",
+  "source": "tok_visa"
+}
+
+###
+
+###############################################
+# DOCUMENTATION & MONITORING
+###############################################
+
+### Open Swagger UI
+# Browser: {{baseUrl}}/api/docs
+
+###
+
+### Health Check via Stats Endpoint
+GET {{baseUrl}}/payment/stats
+
+###
+
+###############################################
+# QUICK TIPS
+###############################################
+
+# 1. Execute payment request 10-20 times to see all chaos scenarios
+# 2. Use custom correlation IDs for easier log tracking
+# 3. Check stats after each batch to verify distribution
+# 4. Reset stats before running new test batches
+# 5. Timeouts will take 5+ seconds - be patient!
+# 6. Use Swagger UI for interactive testing: {{baseUrl}}/api/docs
+
+###
+
+###############################################
+# INTEGRATION TESTING
+###############################################
+
+### Scenario: Retry Logic Test
+# Execute this 3 times:
+# - If you get 408 or 500: Should retry
+# - If you get 402: Should NOT retry (permanent error)
+# - If you get 200: Success, no retry needed
+
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+x-correlation-id: retry-test-{{$timestamp}}
+
+{
+  "amount": 1000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Testing retry logic"
+}
+
+###
+
+### Scenario: Circuit Breaker Test
+# Execute 10 requests rapidly
+# If failure rate > 50%, circuit breaker should open
+# (This would be implemented in the calling service, not here)
+
+POST {{baseUrl}}/payment/charge
+Content-Type: application/json
+
+{
+  "amount": 1000,
+  "currency": "usd",
+  "source": "tok_visa",
+  "description": "Circuit breaker test"
+}
+
+###
+
+### End of File
+# Happy Testing! 🎲💥

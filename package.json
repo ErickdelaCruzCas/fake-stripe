@@ -1,0 +1,25 @@
+{
+  "name": "fake-stripe",
+  "version": "1.0.0",
+  "description": "Learning project: Progressive architecture from aggregator to Temporal-orchestrated microservices",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "echo \"Run tests in individual packages\" && exit 0",
+    "test:all": "npm run test --workspaces",
+    "clean": "rm -rf node_modules packages/*/node_modules packages/*/dist",
+    "build": "npm run build --workspaces",
+    "dev:founder": "npm run dev --workspace=packages/founder",
+    "dev:fake-stripe": "npm run dev --workspace=packages/fake-stripe-chaos",
+    "dev:temporal": "npm run dev --workspace=packages/temporal-orchestrator"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

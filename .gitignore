@@ -137,3 +137,41 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temporal
+.temporal/
+
+# Generated OpenAPI clients (DO NOT commit)
+packages/generated-clients/
+!packages/generated-clients/.gitignore
+
+# OpenAPI specs ARE versioned (openapi.json and openapi.yml in packages/*/)
