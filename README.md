@@ -1,13 +1,69 @@
 # Fake Stripe - Progressive Microservices Architecture
 
-A comprehensive learning project demonstrating evolutionary architecture: from simple aggregator to Temporal-orchestrated microservices with chaos engineering.
+A comprehensive learning project demonstrating evolutionary architecture: from simple aggregator to Temporal-orchestrated microservices with chaos engineering and Saga pattern.
 
-> 📋 **Current Phase**: Phase 3 - Temporal Orchestration ✅
-> See [CLAUDE.md](./CLAUDE.md) for detailed documentation
+> 📋 **Current Phase**: Phase 4 - Order Fulfillment with Saga Pattern ✅
+> 🎯 **Features**: 10/10 Temporal capabilities demonstrated
+> See [CLAUDE.md](./CLAUDE.md) for complete documentation
 
-## Quick Start
+## 🚀 Quick Start - Phase 4
 
-### Using Task (Recommended)
+### Option 1: Interactive Test Script (Recommended)
+
+```bash
+# 1. Start all services
+docker-compose up -d
+
+# 2. Wait ~30s for services to be healthy
+docker-compose ps
+
+# 3. Run interactive test script
+./test-order.sh
+```
+
+**The script provides:**
+- ✅ Scenario 1: Happy Path (auto-approve)
+- ✅ Scenario 2: Manual Approval Flow
+- ✅ Scenario 3: Manager Rejection + Compensation
+- ✅ Scenario 4: User Cancellation + Saga Rollback
+- ✅ Scenario 5: Chaos Testing (10 orders)
+- ✅ Automatic service health checks
+- ✅ Progress monitoring
+- ✅ One-click Temporal UI access
+
+### Option 2: Manual Testing with cURL
+
+```bash
+# 1. Start services
+docker-compose up -d
+
+# 2. Create an order
+curl -X POST http://localhost:3002/order \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "ORD-TEST-001",
+    "customerId": "CUST-001",
+    "items": [{"sku": "ITEM-001", "quantity": 2, "price": 29.99}],
+    "totalAmount": 59.98,
+    "shippingAddress": {
+      "street": "123 Main St",
+      "city": "San Francisco",
+      "state": "CA",
+      "zip": "94105",
+      "country": "US"
+    },
+    "customerEmail": "test@example.com",
+    "requiresApproval": false
+  }'
+
+# 3. Check status
+curl http://localhost:3002/order/order-fulfillment-ORD-TEST-001/status | jq
+
+# 4. Monitor in Temporal UI
+open http://localhost:8080
+```
+
+### Option 3: Using Task (Legacy - Phase 1-3)
 
 ```bash
 # Install Task: https://taskfile.dev/installation/
@@ -16,22 +72,13 @@ brew install go-task
 # Start all services
 task up
 
-# Check service health
-task health
-
-# Test a workflow
-task test:workflow
-
-# Open Temporal UI
-task ui
-
 # View all commands
 task --list
 ```
 
-See [TASKFILE_README.md](./TASKFILE_README.md) for complete guide.
+See [TASKFILE_README.md](./TASKFILE_README.md) for complete Task guide.
 
-### Using Docker Compose
+### Docker Compose Only
 
 ```bash
 # Start all services
@@ -44,33 +91,50 @@ docker-compose logs -f
 docker-compose down
 ```
 
-## Service URLs
+## 🌐 Service URLs
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| Temporal API | http://localhost:3002/api/docs | REST API for workflows (Swagger) |
-| Temporal UI | http://localhost:8080 | Workflow visibility & debugging |
-| Founder API | http://localhost:3000/api/docs | Legacy REST API (Swagger) |
-| Fake Stripe | http://localhost:3001/api/docs | Chaos payment service (Swagger) |
+| **Temporal API** | http://localhost:3002/api/docs | Order Fulfillment workflows (Swagger) |
+| **Temporal UI** | http://localhost:8080 | Workflow monitoring & history |
+| **Fake Stripe** | http://localhost:3001/api/docs | 4-domain chaos service (Swagger) |
+| Founder API | http://localhost:3000/api/docs | Phase 1 aggregator (optional) |
 
-## Project Vision
+**Test Collections:**
+- `packages/temporal-api/requests-order.http` - Order Fulfillment tests ⭐
+- `packages/fake-stripe-chaos/requests.http` - Domain endpoint tests
+- See [QUICKSTART_PHASE4.md](./QUICKSTART_PHASE4.md) for complete guide
+
+## 🎯 Project Evolution
 
 This project evolves through 5 distinct phases, each building on the previous:
 
 ```
-Phase 1: Aggregator    →  Phase 2: Chaos         →  Phase 3: Temporal      →  Phase 4: Observability  →  Phase 5: Production
-(Hexagonal Arch)          (Microservices)           (Workflows) ✅             (Testing + Logging)         (Cloud Deploy)
+Phase 1: Aggregator  →  Phase 2: Chaos    →  Phase 3: Temporal  →  Phase 4: Order Fulfillment ✅  →  Phase 5: Advanced
+(Hexagonal Arch)        (Microservices)       (Workflows)            (Saga + All Features)              (Subscriptions)
 ```
 
 ### Completed Phases
 
-| Phase | Status | Goal | Key Tech |
-|-------|--------|------|----------|
-| **1** | ✅ | API aggregator with hexagonal architecture | NestJS + 3 external APIs |
-| **2** | ✅ | Add payment service with chaos engineering | Fake Stripe + Chaos Engine |
-| **3** | ✅ | Workflow orchestration with durability | Temporal + Activities + Saga |
-| **4** | 🔜 | Production observability | Pino + E2E tests + Metrics |
-| **5** | 📋 | Cloud deployment | Kubernetes + CI/CD |
+| Phase | Status | Goal | Key Features |
+|-------|--------|------|--------------|
+| **1** | ✅ | API aggregator with hexagonal architecture | NestJS, 3 external APIs, Strategy pattern |
+| **2** | ✅ | Payment chaos service | Fake Stripe, Chaos Engine, Statistics |
+| **3** | ✅ | Workflow orchestration basics | Temporal, Activities, Basic Saga |
+| **4** | ✅ | Production order fulfillment | **10/10 Temporal features**, Saga pattern, 4 domains |
+| **5** | 🔜 | Advanced patterns | Continue-as-new, Versioning, Schedules |
+
+**Phase 4 Features Demonstrated:**
+1. ✅ Signals (approve/reject/cancel)
+2. ✅ Queries (status/progress)
+3. ✅ Search Attributes (orderId, customerId, status, amount)
+4. ✅ Activity Heartbeats (shipping progress)
+5. ✅ Activity Cancellation (graceful cleanup)
+6. ✅ Timeouts (2-min approval timeout)
+7. ✅ Retry Policies (domain-specific)
+8. ✅ Saga Pattern (automatic compensations)
+9. ✅ Idempotency (safe retries)
+10. ✅ Long-Running Activities (shipping ~20s)
 
 ## What's Built
 

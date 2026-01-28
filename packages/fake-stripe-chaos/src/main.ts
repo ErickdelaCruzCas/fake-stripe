@@ -19,14 +19,17 @@ async function bootstrap() {
 
   // Swagger/OpenAPI configuration
   const config = new DocumentBuilder()
-    .setTitle('Fake Stripe - Chaos Payment Service')
+    .setTitle('Fake Stripe - Order Fulfillment Chaos Service')
     .setDescription(
-      'Payment processing service with chaos engineering for testing resilience. ' +
-      'Simulates random failures (timeouts, server errors, insufficient funds) ' +
-      'with configurable probability distribution.'
+      'Complete order fulfillment service with chaos engineering for testing resilience. ' +
+      'Simulates 4 bounded contexts: Payment, Inventory, Shipping, Notification. ' +
+      'Each domain has specific failure scenarios for comprehensive testing.'
     )
-    .setVersion('1.0')
-    .addTag('payment', 'Payment processing endpoints with chaos')
+    .setVersion('2.0')
+    .addTag('payment', 'Payment authorization/capture/refund with chaos')
+    .addTag('inventory', 'Inventory reservation with chaos')
+    .addTag('shipping', 'Shipping label generation (long-running) with chaos')
+    .addTag('notification', 'Customer notifications (non-critical) with chaos')
     .addTag('stats', 'Statistics and monitoring endpoints')
     .build();
 
@@ -37,28 +40,35 @@ async function bootstrap() {
   await app.listen(port);
 
   console.log('');
-  console.log('='.repeat(60));
-  console.log('💥 Fake Stripe - Chaos Payment Service Started');
-  console.log('='.repeat(60));
+  console.log('='.repeat(70));
+  console.log('💥 Fake Stripe - Order Fulfillment Chaos Service v2.0');
+  console.log('='.repeat(70));
   console.log(`📡 API Server:    http://localhost:${port}`);
   console.log(`📚 Swagger UI:    http://localhost:${port}/api/docs`);
-  console.log('='.repeat(60));
+  console.log('='.repeat(70));
   console.log('');
-  console.log('Chaos Engineering Configuration:');
-  console.log('  - 40% Success    (HTTP 200)');
-  console.log('  - 30% Timeout    (HTTP 408) - 5s delay');
-  console.log('  - 20% Error 500  (Internal Server Error)');
-  console.log('  - 10% Error 402  (Insufficient Funds)');
-  console.log('='.repeat(60));
+  console.log('🏗️  Architecture: Vertical Slices + Hexagonal (per domain)');
   console.log('');
-  console.log('Available endpoints:');
-  console.log(`  POST   http://localhost:${port}/payment/charge`);
-  console.log(`  GET    http://localhost:${port}/payment/stats`);
-  console.log(`  GET    http://localhost:${port}/payment/stats/recent`);
-  console.log(`  POST   http://localhost:${port}/payment/stats/reset`);
-  console.log('='.repeat(60));
+  console.log('📦 Payment Domain (authorize → capture → refund):');
+  console.log(`  POST   http://localhost:${port}/payment/authorize`);
+  console.log(`  POST   http://localhost:${port}/payment/capture`);
+  console.log(`  POST   http://localhost:${port}/payment/release`);
+  console.log(`  POST   http://localhost:${port}/payment/refund`);
   console.log('');
-  console.log('✅ Ready to simulate chaos');
+  console.log('📦 Inventory Domain (reserve → release):');
+  console.log(`  POST   http://localhost:${port}/inventory/reserve`);
+  console.log(`  POST   http://localhost:${port}/inventory/release`);
+  console.log('');
+  console.log('📦 Shipping Domain (create-label with heartbeat):');
+  console.log(`  POST   http://localhost:${port}/shipping/create-label`);
+  console.log(`  POST   http://localhost:${port}/shipping/cancel`);
+  console.log('');
+  console.log('📦 Notification Domain (send - non-critical):');
+  console.log(`  POST   http://localhost:${port}/notification/send`);
+  console.log('');
+  console.log('='.repeat(70));
+  console.log('✅ Ready for Temporal Order Fulfillment Workflow with Saga Pattern');
+  console.log('='.repeat(70));
   console.log('');
 }
 

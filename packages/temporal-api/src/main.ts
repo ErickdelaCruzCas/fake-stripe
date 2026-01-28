@@ -20,12 +20,16 @@ async function bootstrap() {
 
   // Swagger/OpenAPI setup
   const config = new DocumentBuilder()
-    .setTitle('Temporal API')
+    .setTitle('Temporal API - Workflow Orchestration')
     .setDescription(
-      'REST API for Temporal workflow orchestration - start workflows, query status, track progress'
+      'REST API for Temporal workflow orchestration.\n\n' +
+      '**Phase 3:** User Context workflows (location, weather, cat fact)\n' +
+      '**Phase 4:** Order Fulfillment workflows (payment, inventory, shipping, notification)\n\n' +
+      'Features: Signals, Queries, Search Attributes, Saga Pattern, Activity Heartbeats, Timeouts'
     )
-    .setVersion('1.0')
-    .addTag('workflows', 'Workflow execution and management')
+    .setVersion('2.0')
+    .addTag('workflows', 'User Context workflows (Phase 3)')
+    .addTag('order-fulfillment', 'Order Fulfillment workflows with Saga pattern (Phase 4)')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

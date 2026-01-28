@@ -1,17 +1,74 @@
-# Fake Stripe - Chaos Payment Service
+# Fake Stripe - Order Fulfillment Chaos Service v2.0
 
-Payment processing service with **chaos engineering** for testing resilience of distributed systems.
+Complete **order fulfillment service** with **chaos engineering** for testing resilience of distributed Temporal workflows.
 
-## 🎲 Chaos Engineering
+## 🏗️ Architecture: Vertical Slices + Hexagonal
 
-This service simulates realistic payment processing failures to test system resilience:
+Phase 4 evolution with **4 bounded contexts**, each with its own hexagonal architecture:
 
-| Scenario | Probability | HTTP Status | Description |
-|----------|-------------|-------------|-------------|
-| **Success** | 40% | 200 OK | Payment processed successfully |
-| **Timeout** | 30% | 408 Request Timeout | 5-second delay + timeout (simulates slow network/overloaded service) |
-| **Server Error** | 20% | 500 Internal Server Error | Unhandled exception (simulates bugs) |
-| **Insufficient Funds** | 10% | 402 Payment Required | Business validation failure (simulates invalid card) |
+```
+fake-stripe-chaos/
+├── payment/              # Payment Domain
+│   ├── domain/           # Pure business logic
+│   ├── application/      # Use cases & DTOs
+│   ├── infrastructure/   # Chaos, repository
+│   └── presentation/     # REST controllers
+│
+├── inventory/            # Inventory Domain
+│   ├── domain/
+│   ├── application/
+│   ├── infrastructure/
+│   └── presentation/
+│
+├── shipping/             # Shipping Domain (long-running)
+│   ├── domain/
+│   ├── application/
+│   ├── infrastructure/
+│   └── presentation/
+│
+└── notification/         # Notification Domain (non-critical)
+    ├── domain/
+    ├── application/
+    ├── infrastructure/
+    └── presentation/
+```
+
+## 🎲 Chaos Engineering - Per Domain
+
+Each domain has specific failure scenarios to test real-world resilience:
+
+### 💳 Payment Domain
+
+| Operation | Success | Scenarios |
+|-----------|---------|-----------|
+| **Authorize** | 40% | 30% insufficient funds, 20% timeout, 10% error |
+| **Capture** | 70% | 20% already captured, 10% expired |
+| **Release** | 85% | 10% already released, 5% error |
+| **Refund** | 75% | 15% timeout, 10% error |
+
+### 📦 Inventory Domain
+
+| Operation | Success | Scenarios |
+|-----------|---------|-----------|
+| **Reserve** | 50% | 30% out of stock, 10% timeout, 10% error |
+| **Release** | 90% | 10% error |
+
+### 🚚 Shipping Domain
+
+| Operation | Success | Scenarios |
+|-----------|---------|-----------|
+| **Create Label** | 60% | 20% address error, 10% timeout (20s), 10% carrier error |
+| **Cancel** | 95% | 5% error |
+
+**Note:** Shipping label generation is **long-running (~20s)** with heartbeat support for Temporal activities.
+
+### 📧 Notification Domain
+
+| Operation | Success | Scenarios |
+|-----------|---------|-----------|
+| **Send** | 80% | 15% delivery failed, 5% invalid recipient |
+
+**Note:** Notifications are **non-critical** - failures don't trigger Saga rollback.
 
 ## 🚀 Quick Start
 
@@ -37,7 +94,7 @@ npm start
 # From project root
 docker-compose up fake-stripe-chaos
 
-# Or build and run standalone
+# Or standalone
 cd packages/fake-stripe-chaos
 docker build -t fake-stripe-chaos .
 docker run -p 3001:3001 fake-stripe-chaos
@@ -45,240 +102,241 @@ docker run -p 3001:3001 fake-stripe-chaos
 
 ## 📡 API Endpoints
 
-### Process Payment Charge
+### Payment Domain
 
 ```http
-POST /payment/charge
-Content-Type: application/json
-
+# 1. Authorize Payment (hold funds)
+POST /payment/authorize
 {
-  "amount": 1000,        // Amount in cents ($10.00)
-  "currency": "usd",     // Currency code
-  "source": "tok_visa",  // Payment token
-  "description": "Premium subscription"  // Optional
-}
-```
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "chargeId": "ch_1234567890abcdef",
-  "amount": 1000,
+  "amount": 10000,
   "currency": "usd",
-  "status": "succeeded",
-  "createdAt": "2024-01-26T10:30:00.000Z"
+  "orderId": "ORD-123",
+  "customerId": "CUST-456"
 }
-```
 
-**Error Responses:**
-
-- **408 Request Timeout** (30% probability - after 5s delay):
-```json
+# 2. Capture Payment (charge funds)
+POST /payment/capture
 {
-  "success": false,
-  "error": "timeout",
-  "message": "Payment service timeout - request took too long to process"
+  "authId": "auth_abc123"
 }
-```
 
-- **500 Internal Server Error** (20% probability):
-```json
+# 3. Release Payment (compensation)
+POST /payment/release
 {
-  "success": false,
-  "error": "internal_error",
-  "message": "An internal error occurred while processing payment"
+  "authId": "auth_abc123"
 }
-```
 
-- **402 Payment Required** (10% probability):
-```json
+# 4. Refund Payment (compensation)
+POST /payment/refund
 {
-  "success": false,
-  "error": "insufficient_funds",
-  "message": "The card has insufficient funds to complete this transaction"
+  "authId": "auth_abc123",
+  "amount": 5000,
+  "reason": "Customer requested"
 }
+
+# 5. Get Chaos Distribution
+GET /payment/chaos/distribution
 ```
 
-### Get Statistics
+### Inventory Domain
 
 ```http
-GET /payment/stats
-```
-
-Response:
-```json
+# 1. Reserve Inventory
+POST /inventory/reserve
 {
-  "totalRequests": 100,
-  "successful": 40,
-  "timeouts": 30,
-  "errors500": 20,
-  "errors402": 10,
-  "successRate": "0.40",
-  "distribution": {
-    "timeout": "30.0%",
-    "error500": "20.0%",
-    "error402": "10.0%",
-    "success": "40.0%"
-  }
+  "items": [
+    { "sku": "ITEM-001", "quantity": 2 }
+  ],
+  "orderId": "ORD-123"
+}
+
+# 2. Release Inventory (compensation)
+POST /inventory/release
+{
+  "reservationId": "res_xyz789"
 }
 ```
 
-### Get Recent Requests
+### Shipping Domain
 
 ```http
-GET /payment/stats/recent?limit=10
+# 1. Create Shipping Label (long-running ~20s)
+POST /shipping/create-label
+{
+  "shippingAddress": {
+    "street": "123 Main St",
+    "city": "San Francisco",
+    "state": "CA",
+    "zip": "94105",
+    "country": "US"
+  },
+  "carrier": "UPS",
+  "orderId": "ORD-123"
+}
+
+# 2. Cancel Shipping (compensation)
+POST /shipping/cancel
+{
+  "labelId": "lbl_abc123"
+}
 ```
 
-### Reset Statistics
+### Notification Domain
 
 ```http
-POST /payment/stats/reset
+# 1. Send Notification
+POST /notification/send
+{
+  "type": "email",
+  "recipient": "customer@example.com",
+  "subject": "Your order has shipped!",
+  "message": "Order ORD-123 shipped...",
+  "orderId": "ORD-123"
+}
 ```
 
 ## 📚 API Documentation
 
 **Swagger UI:** http://localhost:3001/api/docs
 
-Interactive API documentation with:
+Interactive documentation with:
+- All 4 domains documented
+- Chaos scenarios per endpoint
 - Request/response schemas
 - Try it out feature
-- Model definitions
-- Error examples
 
-## 🔬 Testing Resilience
+## 🔄 Order Fulfillment Flow
 
-### Manual Testing
+### Happy Path
 
-```bash
-# Test with cURL (execute multiple times)
-for i in {1..10}; do
-  curl -X POST http://localhost:3001/payment/charge \
-    -H "Content-Type: application/json" \
-    -d '{"amount":1000,"currency":"usd","source":"tok_visa"}' \
-    && echo ""
-done
-
-# Check statistics
-curl http://localhost:3001/payment/stats | jq
+```
+1. POST /payment/authorize    → authId
+   ↓ (Wait for manager approval in Temporal)
+2. POST /inventory/reserve     → reservationId
+   ↓
+3. POST /payment/capture       → charged
+   ↓
+4. POST /shipping/create-label → labelId (20s with heartbeat)
+   ↓
+5. POST /notification/send     → notification sent
+   ✅ ORDER COMPLETE
 ```
 
-### With REST Client (VS Code)
+### Failure + Saga Compensation
 
-1. Install extension: `humao.rest-client`
-2. Open `requests.http` in project root
-3. Click "Send Request" above each `###`
-4. Execute `/payment/charge` multiple times
-5. Check `/payment/stats` to verify distribution
+```
+1. POST /payment/authorize     → authId ✅
+2. POST /inventory/reserve     → reservationId ✅
+3. POST /payment/capture       → charged ✅
+4. POST /shipping/create-label → ❌ FAILS (address error)
 
-### Expected Results
+   🔄 COMPENSATION (Saga Rollback):
+   ├─ POST /inventory/release  → inventory freed
+   └─ POST /payment/refund     → payment refunded
+```
 
-After ~100 requests, distribution should be approximately:
-- 40 successful charges (200 OK)
-- 30 timeouts (408)
-- 20 server errors (500)
-- 10 insufficient funds (402)
+## 🧪 Testing with Temporal
 
-## 🏗️ Architecture
+This service is designed for **Temporal Order Fulfillment Workflow** testing:
 
-### Chaos Engine
+1. **Signals:** Manager approval/rejection
+2. **Queries:** Real-time order status
+3. **Search Attributes:** Find orders by customer/status/amount
+4. **Activity Heartbeats:** Shipping label progress tracking
+5. **Activity Cancellation:** Cancel shipment if workflow cancelled
+6. **Timeouts:** Approval timeout (2 min) triggers release
+7. **Retry Policies:** Different per domain
+8. **Saga Pattern:** Automatic compensation on failure
+9. **Idempotency:** Safe activity retries
 
-**Location:** `src/chaos/chaos-engine.service.ts`
+### Testing Scenarios
 
-Core service that implements chaos engineering logic:
-- Random scenario selection based on probability
-- Simulates realistic failure patterns
-- Configurable delay for timeouts
-- Detailed logging for debugging
+```bash
+# Test all scenarios by executing requests multiple times
+# See requests.http for complete test collection
 
-### Payment Service
+# 1. Test Happy Path (execute each step manually)
+# 2. Test Saga Rollback (force shipping failure)
+# 3. Test Timeout Scenarios (wait for timeout chaos)
+# 4. Test Retry Policies (retry on 500/408 errors)
+# 5. Test Long-Running Activities (shipping with heartbeat)
+```
 
-**Location:** `src/payment/payment.service.ts`
+## 🏗️ Hexagonal Architecture
 
-Wraps business logic with chaos engineering:
-- Integrates ChaosEngineService
-- Records statistics for each request
-- Handles error propagation
-- Correlation ID support for distributed tracing
+Each domain follows:
 
-### Statistics Service
+```
+Domain Layer (Pure Business Logic)
+├── models/       # Entities (PaymentAuthorization, InventoryReservation)
+├── ports/        # Interfaces (RepositoryPort)
+└── services/     # Domain logic (validation, factory methods)
 
-**Location:** `src/stats/stats.service.ts`
+Application Layer (Orchestration)
+├── dto/          # Request/response objects
+└── use-cases/    # Orchestrate domain + infrastructure
 
-Tracks all payment requests:
-- In-memory request history
-- Aggregated statistics
-- Recent requests view
-- Reset capability for testing
+Infrastructure Layer (Technical Details)
+├── adapters/     # In-memory repositories
+└── chaos/        # Chaos engines per domain
+
+Presentation Layer (API)
+└── controllers/  # REST endpoints
+```
+
+**Benefits:**
+- ✅ Testable (mock repositories via ports)
+- ✅ Swappable implementations (in-memory → PostgreSQL)
+- ✅ Domain isolated from framework
+- ✅ Clear separation of concerns
 
 ## 🔍 Observability
 
 ### Correlation ID Support
 
-Each request can include `x-correlation-id` header:
-
 ```http
-POST /payment/charge
-Content-Type: application/json
-x-correlation-id: my-test-id-123
+POST /payment/authorize
+x-correlation-id: my-order-123
 
 {...}
 ```
 
-The correlation ID is:
-- Extracted from request header or auto-generated
-- Included in all log entries
-- Returned in response header
-- Used for distributed tracing
+Correlation ID is:
+- Auto-generated if not provided
+- Propagated through all logs
+- Returned in response headers
+- Used for distributed tracing in Temporal
 
 ### Structured Logging
 
-All logs are in JSON format:
+All logs in JSON format:
 
 ```json
 {
-  "message": "Chaos scenario selected",
+  "message": "Authorizing payment",
   "correlationId": "abc-123",
-  "scenario": "timeout",
-  "random": "0.2345"
+  "amount": 10000,
+  "currency": "usd"
 }
 ```
 
-Search logs by correlation ID:
+Search logs:
 ```bash
 npm run dev 2>&1 | grep "abc-123"
 ```
 
-## 🧪 Use Cases
+## 📊 Statistics & Monitoring
 
-### 1. Testing Client Retry Logic
+```http
+# Get payment statistics (legacy)
+GET /payment/stats
 
-Use Fake Stripe to verify your client properly handles:
-- Timeouts (should retry with exponential backoff)
-- 500 errors (should retry)
-- 402 errors (should NOT retry - permanent failure)
+# Get recent requests
+GET /payment/stats/recent
 
-### 2. Load Testing with Chaos
-
-Combine with load testing tools (k6, Artillery) to:
-- Test system behavior under partial failures
-- Verify circuit breakers work correctly
-- Validate monitoring and alerting
-
-### 3. Distributed Tracing Validation
-
-Use correlation IDs to:
-- Trace requests across multiple services
-- Identify bottlenecks
-- Debug production issues
-
-### 4. Resilience Training
-
-Educate team on:
-- Realistic failure patterns
-- Proper error handling
-- Retry strategies
-- Circuit breaker patterns
+# Reset statistics
+POST /payment/stats/reset
+```
 
 ## 🔧 Configuration
 
@@ -291,89 +349,85 @@ PORT=3001
 
 ### Chaos Probabilities
 
-Edit `src/chaos/chaos-engine.service.ts`:
+Each domain has configurable chaos scenarios in:
+- `payment/infrastructure/chaos/payment-chaos.engine.ts`
+- `inventory/infrastructure/chaos/inventory-chaos.engine.ts`
+- `shipping/infrastructure/chaos/shipping-chaos.engine.ts`
+- `notification/infrastructure/chaos/notification-chaos.engine.ts`
+
+## 📝 Data Models
+
+### Order Input (for Temporal Workflow)
 
 ```typescript
-private readonly scenarios = {
-  timeout: 0.30,   // 30% timeout
-  error500: 0.20,  // 20% server error
-  error402: 0.10,  // 10% insufficient funds
-  success: 0.40,   // 40% success
-};
+{
+  orderId: "ORD-123",
+  customerId: "CUST-456",
+  items: [
+    { sku: "ITEM-001", quantity: 2, price: 29.99 }
+  ],
+  totalAmount: 59.98,
+  shippingAddress: {
+    street: "123 Main St",
+    city: "San Francisco",
+    state: "CA",
+    zip: "94105",
+    country: "US"
+  },
+  customerEmail: "customer@example.com"
+}
 ```
-
-### Timeout Duration
-
-```typescript
-// Default: 5 seconds
-await this.delay(5000);
-```
-
-## 📊 Monitoring
-
-### Health Check
-
-```http
-GET /payment/stats
-```
-
-If service is healthy, returns statistics.
-
-### Metrics to Monitor
-
-- **Success Rate:** Should be ~40%
-- **Timeout Rate:** Should be ~30%
-- **Error Rate:** Should be ~30% (500 + 402)
-- **Average Response Time:** ~2.5s (accounting for 5s timeouts)
 
 ## 🚨 Common Issues
 
-### Timeouts Taking Too Long
+### Shipping Takes 20 Seconds
 
-**Issue:** Client timeout < 5s
-**Solution:** Increase client timeout to 6s+ to allow server timeout to occur
+**Expected:** Shipping label generation is intentionally slow to demonstrate:
+- Activity heartbeats
+- Long-running operations
+- Progress tracking
 
-### Distribution Not Matching
+### Chaos Scenarios Not Matching Exactly
 
-**Issue:** After 10 requests, distribution is off
-**Solution:** Need more samples (100+) for statistical accuracy
+**Expected:** Probabilities are statistical - need 100+ requests for accurate distribution.
 
-### No Logs Visible
+### Compensation Not Happening
 
-**Issue:** Logs not appearing in console
-**Solution:** Check `NODE_ENV` is set to `development`
+**Cause:** Manual testing - compensations are automatic in Temporal workflows.
 
 ## 📖 Learning Resources
 
-- [Chaos Engineering Principles](https://principlesofchaos.org/)
-- [Netflix Chaos Monkey](https://netflix.github.io/chaosmonkey/)
-- [Resilience Patterns](https://learn.microsoft.com/en-us/azure/architecture/patterns/category/resiliency)
-- [Circuit Breaker Pattern](https://martinfowler.com/bliki/CircuitBreaker.html)
+- [Temporal Workflows](https://docs.temporal.io/workflows)
+- [Saga Pattern](https://microservices.io/patterns/data/saga.html)
+- [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/)
+- [Chaos Engineering](https://principlesofchaos.org/)
 
-## 🤝 Integration with Founder
-
-In Phase 2+, Founder service will call Fake Stripe for premium features:
+## 🤝 Integration with Temporal
 
 ```
-Client → Founder → Fake Stripe (chaos)
-          ↓
-    Retry Logic (manual)
-          ↓
-    Success or Failure
+Temporal Workflow (temporal-worker)
+  ↓
+Activities Call → fake-stripe-chaos
+  - Payment Activities → /payment/*
+  - Inventory Activities → /inventory/*
+  - Shipping Activities → /shipping/* (with heartbeat)
+  - Notification Activities → /notification/*
+
+On Failure → Saga Compensation
+  - Refund payment
+  - Release inventory
+  - Cancel shipment
 ```
 
-Founder must handle:
-- Timeouts with retry
-- 500 errors with retry
-- 402 errors without retry (permanent)
+## 📝 Next Steps (Phase 5)
 
-## 📝 Next Steps
-
-**Phase 3:** Integrate Temporal for reliable workflow orchestration
-- Replace manual retry with Temporal retry policies
-- Add Saga pattern for compensations
-- Distributed tracing with workflow IDs
+- [ ] Add human-in-the-loop approval workflow
+- [ ] Implement continue-as-new for subscriptions
+- [ ] Add activity heartbeat details visibility
+- [ ] Enhanced search attributes
+- [ ] Workflow versioning examples
 
 ---
 
-Built with ❤️ for learning resilience engineering
+**Phase 4 Complete** ✅
+Built with ❤️ for learning Temporal, Saga, and Hexagonal Architecture

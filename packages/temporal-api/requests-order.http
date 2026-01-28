@@ -1,0 +1,357 @@
+### ========================================
+### TEMPORAL API - ORDER FULFILLMENT
+### Phase 4: Complete Order Workflow with Saga Pattern
+### ========================================
+
+@baseUrl = http://localhost:3002
+@temporalUI = http://localhost:8080
+
+### ========================================
+### SCENARIO 1: Happy Path (Auto-Approve)
+### ========================================
+
+### 1.1. Start Order Workflow (NO approval required)
+POST {{baseUrl}}/api/v1/order
+Content-Type: application/json
+
+{
+  "orderId": "ORD-HAPPY-001",
+  "customerId": "CUST-001",
+  "items": [
+    {
+      "sku": "ITEM-001",
+      "quantity": 2,
+      "price": 29.99
+    },
+    {
+      "sku": "ITEM-002",
+      "quantity": 1,
+      "price": 49.99
+    }
+  ],
+  "totalAmount": 109.97,
+  "shippingAddress": {
+    "street": "123 Main St",
+    "city": "San Francisco",
+    "state": "CA",
+    "zip": "94105",
+    "country": "US"
+  },
+  "customerEmail": "customer@example.com",
+  "requiresApproval": false
+}
+
+### Save workflowId from response
+@workflowId = order-fulfillment-ORD-HAPPY-001
+
+### 1.2. Get Order Status (Query - Real-time)
+GET {{baseUrl}}/api/v1/order/{{workflowId}}/status
+
+### 1.3. Get Progress (0-100%)
+GET {{baseUrl}}/api/v1/order/{{workflowId}}/progress
+
+### 1.4. Get Final Result (WAITS for completion)
+# This will wait until workflow completes (~30s due to shipping)
+# GET {{baseUrl}}/api/v1/order/{{workflowId}}/result
+
+
+### ========================================
+### SCENARIO 2: Human Approval Flow
+### ========================================
+
+### 2.1. Start Order WITH Approval Required
+POST {{baseUrl}}/api/v1/order
+Content-Type: application/json
+
+{
+  "orderId": "ORD-APPROVAL-001",
+  "customerId": "CUST-002",
+  "items": [
+    {
+      "sku": "ITEM-001",
+      "quantity": 5,
+      "price": 99.99
+    }
+  ],
+  "totalAmount": 499.95,
+  "shippingAddress": {
+    "street": "456 Oak Ave",
+    "city": "New York",
+    "state": "NY",
+    "zip": "10001",
+    "country": "US"
+  },
+  "customerEmail": "vip@example.com",
+  "requiresApproval": true
+}
+
+@workflowIdApproval = order-fulfillment-ORD-APPROVAL-001
+
+### 2.2. Check Status (Should be "pending_approval")
+GET {{baseUrl}}/api/v1/order/{{workflowIdApproval}}/status
+
+### 2.3. APPROVE Order (Manager Signal)
+POST {{baseUrl}}/api/v1/order/{{workflowIdApproval}}/approve
+
+### 2.4. Check Status Again (Should be "processing" now)
+GET {{baseUrl}}/api/v1/order/{{workflowIdApproval}}/status
+
+
+### ========================================
+### SCENARIO 3: Manager Rejection
+### ========================================
+
+### 3.1. Start Order WITH Approval
+POST {{baseUrl}}/api/v1/order
+Content-Type: application/json
+
+{
+  "orderId": "ORD-REJECT-001",
+  "customerId": "CUST-003",
+  "items": [
+    {
+      "sku": "ITEM-003",
+      "quantity": 100,
+      "price": 999.99
+    }
+  ],
+  "totalAmount": 99999.00,
+  "shippingAddress": {
+    "street": "789 Suspect Blvd",
+    "city": "Las Vegas",
+    "state": "NV",
+    "zip": "89101",
+    "country": "US"
+  },
+  "customerEmail": "suspicious@example.com",
+  "requiresApproval": true
+}
+
+@workflowIdReject = order-fulfillment-ORD-REJECT-001
+
+### 3.2. REJECT Order (Manager Signal)
+POST {{baseUrl}}/api/v1/order/{{workflowIdReject}}/reject
+
+### 3.3. Check Status (Should show "rejected" with compensation)
+GET {{baseUrl}}/api/v1/order/{{workflowIdReject}}/status
+
+
+### ========================================
+### SCENARIO 4: User Cancellation
+### ========================================
+
+### 4.1. Start Order
+POST {{baseUrl}}/api/v1/order
+Content-Type: application/json
+
+{
+  "orderId": "ORD-CANCEL-001",
+  "customerId": "CUST-004",
+  "items": [
+    {
+      "sku": "ITEM-001",
+      "quantity": 1,
+      "price": 19.99
+    }
+  ],
+  "totalAmount": 19.99,
+  "shippingAddress": {
+    "street": "321 Cancel St",
+    "city": "Boston",
+    "state": "MA",
+    "zip": "02101",
+    "country": "US"
+  },
+  "customerEmail": "changed-mind@example.com",
+  "requiresApproval": false
+}
+
+@workflowIdCancel = order-fulfillment-ORD-CANCEL-001
+
+### 4.2. Wait a few seconds, then CANCEL
+# Sleep 10s to let some steps complete before cancelling
+POST {{baseUrl}}/api/v1/order/{{workflowIdCancel}}/cancel
+
+### 4.3. Check Status (Should show compensations executed)
+GET {{baseUrl}}/api/v1/order/{{workflowIdCancel}}/status
+
+
+### ========================================
+### SCENARIO 5: Approval Timeout (2 minutes)
+### ========================================
+
+### 5.1. Start Order WITH Approval
+POST {{baseUrl}}/api/v1/order
+Content-Type: application/json
+
+{
+  "orderId": "ORD-TIMEOUT-001",
+  "customerId": "CUST-005",
+  "items": [
+    {
+      "sku": "ITEM-002",
+      "quantity": 1,
+      "price": 49.99
+    }
+  ],
+  "totalAmount": 49.99,
+  "shippingAddress": {
+    "street": "999 Timeout Ln",
+    "city": "Seattle",
+    "state": "WA",
+    "zip": "98101",
+    "country": "US"
+  },
+  "customerEmail": "forgot@example.com",
+  "requiresApproval": true
+}
+
+@workflowIdTimeout = order-fulfillment-ORD-TIMEOUT-001
+
+### 5.2. DON'T approve - wait 2 minutes
+# Workflow will auto-reject after timeout
+
+### 5.3. Check Status After 2+ Minutes (Should be "rejected" due to timeout)
+# GET {{baseUrl}}/api/v1/order/{{workflowIdTimeout}}/status
+
+
+### ========================================
+### SCENARIO 6: Saga Compensation - Shipping Fails
+### ========================================
+
+### 6.1. Start Order (Retry until shipping fails with bad address)
+# Execute this multiple times until you get address validation error in shipping
+POST {{baseUrl}}/api/v1/order
+Content-Type: application/json
+
+{
+  "orderId": "ORD-SAGA-001",
+  "customerId": "CUST-006",
+  "items": [
+    {
+      "sku": "ITEM-001",
+      "quantity": 2,
+      "price": 29.99
+    }
+  ],
+  "totalAmount": 59.98,
+  "shippingAddress": {
+    "street": "Invalid",
+    "city": "InvalidCity",
+    "state": "XX",
+    "zip": "00000",
+    "country": "US"
+  },
+  "customerEmail": "saga@example.com",
+  "requiresApproval": false
+}
+
+@workflowIdSaga = order-fulfillment-ORD-SAGA-001
+
+### 6.2. Check Status (Should show compensations: refund + release inventory)
+GET {{baseUrl}}/api/v1/order/{{workflowIdSaga}}/status
+
+
+### ========================================
+### SCENARIO 7: Chaos Testing - Multiple Orders
+### ========================================
+
+### 7.1. Execute Multiple Orders to See Different Chaos Scenarios
+# Run this 10 times to see:
+# - Payment authorization failures (30% insufficient funds)
+# - Inventory out of stock (30%)
+# - Shipping address errors (20%)
+# - Various timeout scenarios
+POST {{baseUrl}}/api/v1/order
+Content-Type: application/json
+
+{
+  "orderId": "ORD-CHAOS-{{$randomInt}}",
+  "customerId": "CUST-CHAOS-{{$randomInt}}",
+  "items": [
+    {
+      "sku": "ITEM-001",
+      "quantity": 1,
+      "price": 29.99
+    }
+  ],
+  "totalAmount": 29.99,
+  "shippingAddress": {
+    "street": "123 Test St",
+    "city": "Chicago",
+    "state": "IL",
+    "zip": "60601",
+    "country": "US"
+  },
+  "customerEmail": "chaos-test@example.com",
+  "requiresApproval": false
+}
+
+
+### ========================================
+### MONITORING & DEBUGGING
+### ========================================
+
+### Check Any Workflow Status
+@anyWorkflowId = order-fulfillment-ORD-HAPPY-001
+GET {{baseUrl}}/api/v1/order/{{anyWorkflowId}}/status
+
+### Check Progress
+GET {{baseUrl}}/api/v1/order/{{anyWorkflowId}}/progress
+
+### Health Check
+GET {{baseUrl}}/health
+
+
+### ========================================
+### TEMPORAL UI
+### ========================================
+
+### Open Temporal UI in Browser
+# View complete execution history, activity details, search workflows
+# @name temporalUI
+# {{temporalUI}}
+
+### Search Workflows in UI:
+# - By orderId: orderId = 'ORD-HAPPY-001'
+# - By customerId: customerId = 'CUST-001'
+# - By status: orderStatus = 'shipped'
+# - By amount: totalAmount > 100
+
+
+### ========================================
+### TESTING CHECKLIST
+### ========================================
+
+# ✅ Features Demonstrated:
+# 1. Signals: approve, reject, cancel
+# 2. Queries: getOrderStatus, getProgress
+# 3. Search Attributes: orderId, customerId, orderStatus, totalAmount
+# 4. Activity Heartbeats: shipping label progress (visible in Temporal UI)
+# 5. Timeouts: 2-minute approval timeout
+# 6. Retry Policies: different per domain (payment 3x, inventory 2x, shipping 5x)
+# 7. Saga Pattern: automatic compensations on failure
+# 8. Cancellation: graceful cleanup of all resources
+# 9. Long-Running Activities: shipping with ~20s duration
+# 10. Non-Critical Activities: notification doesn't block workflow
+
+### ========================================
+### QUICK START
+### ========================================
+
+# 1. Start all services:
+#    - fake-stripe-chaos (port 3001)
+#    - temporal server (port 7233)
+#    - temporal-worker
+#    - temporal-api (port 3002)
+
+# 2. Execute Scenario 1 (Happy Path) above
+
+# 3. Monitor in Temporal UI: http://localhost:8080
+
+# 4. Try other scenarios to see Saga compensations
+
+###
+
+### End of File
+# Phase 4 Order Fulfillment - Complete! 🎉

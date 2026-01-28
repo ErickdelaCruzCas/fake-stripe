@@ -1,421 +1,376 @@
-# Fake Stripe - Chaos Payment Service
-# REST Client configuration for testing payment endpoints
-# Install VS Code extension: humao.rest-client
+### ========================================
+### FAKE STRIPE - ORDER FULFILLMENT CHAOS
+### Architecture: Vertical Slices + Hexagonal
+### Version: 2.0
+### ========================================
 
-### Variables
 @baseUrl = http://localhost:3001
-@correlationId = test-{{$timestamp}}
+@orderId = ORD-TEST-001
+@customerId = CUST-TEST-001
 
-###############################################
-# PAYMENT ENDPOINTS
-###############################################
+### ========================================
+### PAYMENT DOMAIN - Complete Flow
+### ========================================
 
-### 1. Process Payment Charge - Basic
-POST {{baseUrl}}/payment/charge
+### 1. Authorize Payment (hold funds)
+# Chaos: 40% success, 30% insufficient funds, 20% timeout, 10% error
+POST {{baseUrl}}/payment/authorize
 Content-Type: application/json
 
 {
-  "amount": 1000,
+  "amount": 10000,
   "currency": "usd",
-  "source": "tok_visa",
-  "description": "Basic test payment"
+  "orderId": "{{orderId}}",
+  "customerId": "{{customerId}}"
 }
 
-###
+### Save authId from response
+@authId = auth_abc123def456
 
-### 2. Process Payment Charge - With Custom Correlation ID
-POST {{baseUrl}}/payment/charge
+### 2. Capture Payment (charge funds)
+# Chaos: 70% success, 20% already captured, 10% expired
+POST {{baseUrl}}/payment/capture
 Content-Type: application/json
-x-correlation-id: {{correlationId}}
 
 {
-  "amount": 2500,
-  "currency": "usd",
-  "source": "tok_mastercard",
-  "description": "Payment with correlation ID tracking"
+  "authId": "{{authId}}"
 }
 
-###
+### 3. Release Payment (compensation - if manager rejects)
+# Chaos: 85% success, 10% already released, 5% error
+POST {{baseUrl}}/payment/release
+Content-Type: application/json
 
-### 3. Process Payment Charge - Premium Amount
-POST {{baseUrl}}/payment/charge
+{
+  "authId": "{{authId}}"
+}
+
+### 4. Refund Payment (compensation - if shipping fails)
+# Chaos: 75% success, 15% timeout, 10% error
+POST {{baseUrl}}/payment/refund
+Content-Type: application/json
+
+{
+  "authId": "{{authId}}",
+  "amount": 5000,
+  "reason": "Customer requested cancellation"
+}
+
+### 5. Get Chaos Distribution for Payment
+GET {{baseUrl}}/payment/chaos/distribution
+
+
+### ========================================
+### INVENTORY DOMAIN - Complete Flow
+### ========================================
+
+### 1. Reserve Inventory
+# Chaos: 50% success, 30% out of stock, 10% timeout, 10% error
+POST {{baseUrl}}/inventory/reserve
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "sku": "ITEM-001",
+      "quantity": 2,
+      "warehouseId": "WH-US-EAST"
+    },
+    {
+      "sku": "ITEM-002",
+      "quantity": 1,
+      "warehouseId": "WH-US-EAST"
+    }
+  ],
+  "orderId": "{{orderId}}"
+}
+
+### Save reservationId from response
+@reservationId = res_xyz789abc123
+
+### 2. Release Inventory (compensation)
+# Chaos: 90% success, 10% error
+POST {{baseUrl}}/inventory/release
+Content-Type: application/json
+
+{
+  "reservationId": "{{reservationId}}"
+}
+
+
+### ========================================
+### SHIPPING DOMAIN - Complete Flow
+### ========================================
+
+### 1. Create Shipping Label (long-running ~20s with heartbeat)
+# Chaos: 60% success, 20% address error, 10% timeout, 10% carrier error
+POST {{baseUrl}}/shipping/create-label
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "street": "123 Main St",
+    "city": "San Francisco",
+    "state": "CA",
+    "zip": "94105",
+    "country": "US"
+  },
+  "carrier": "UPS",
+  "orderId": "{{orderId}}"
+}
+
+### Save labelId from response
+@labelId = lbl_abc123def456
+
+### 2. Cancel Shipping Label (compensation)
+# Chaos: 95% success, 5% error
+POST {{baseUrl}}/shipping/cancel
+Content-Type: application/json
+
+{
+  "labelId": "{{labelId}}"
+}
+
+
+### ========================================
+### NOTIFICATION DOMAIN - Non-Critical
+### ========================================
+
+### 1. Send Email Notification
+# Chaos: 80% success, 15% delivery failed, 5% invalid recipient
+POST {{baseUrl}}/notification/send
+Content-Type: application/json
+
+{
+  "type": "email",
+  "recipient": "customer@example.com",
+  "subject": "Your order has shipped!",
+  "message": "Your order {{orderId}} has been shipped and will arrive in 3-5 business days.",
+  "orderId": "{{orderId}}"
+}
+
+### 2. Send SMS Notification
+POST {{baseUrl}}/notification/send
+Content-Type: application/json
+
+{
+  "type": "sms",
+  "recipient": "+1234567890",
+  "subject": "Order Update",
+  "message": "Your order {{orderId}} is out for delivery!",
+  "orderId": "{{orderId}}"
+}
+
+
+### ========================================
+### STATS - Monitoring (Legacy)
+### ========================================
+
+### Get Stats
+GET {{baseUrl}}/payment/stats
+
+### Get Recent Requests
+GET {{baseUrl}}/payment/stats/recent
+
+### Reset Stats
+POST {{baseUrl}}/payment/stats/reset
+
+
+### ========================================
+### COMPLETE ORDER FLOW - Happy Path
+### ========================================
+
+### Step 1: Authorize Payment
+POST {{baseUrl}}/payment/authorize
+Content-Type: application/json
+
+{
+  "amount": 15000,
+  "currency": "usd",
+  "orderId": "ORD-FLOW-001",
+  "customerId": "CUST-FLOW-001"
+}
+
+### Step 2: Reserve Inventory (using authId from step 1)
+POST {{baseUrl}}/inventory/reserve
+Content-Type: application/json
+
+{
+  "items": [
+    { "sku": "ITEM-001", "quantity": 3 }
+  ],
+  "orderId": "ORD-FLOW-001"
+}
+
+### Step 3: Capture Payment (using authId from step 1)
+POST {{baseUrl}}/payment/capture
+Content-Type: application/json
+
+{
+  "authId": "auth_from_step1"
+}
+
+### Step 4: Create Shipping Label
+POST {{baseUrl}}/shipping/create-label
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "street": "456 Oak Ave",
+    "city": "New York",
+    "state": "NY",
+    "zip": "10001",
+    "country": "US"
+  },
+  "carrier": "FedEx",
+  "orderId": "ORD-FLOW-001"
+}
+
+### Step 5: Send Success Notification
+POST {{baseUrl}}/notification/send
+Content-Type: application/json
+
+{
+  "type": "email",
+  "recipient": "customer@example.com",
+  "subject": "Order Confirmation - ORD-FLOW-001",
+  "message": "Your order has been confirmed and will ship soon!",
+  "orderId": "ORD-FLOW-001"
+}
+
+
+### ========================================
+### SAGA COMPENSATION FLOW - Failure Path
+### ========================================
+
+### Scenario: Payment OK → Inventory OK → Shipping FAILS → Rollback
+
+### 1. Authorize Payment
+POST {{baseUrl}}/payment/authorize
+Content-Type: application/json
+
+{
+  "amount": 20000,
+  "currency": "usd",
+  "orderId": "ORD-SAGA-001",
+  "customerId": "CUST-SAGA-001"
+}
+
+### 2. Reserve Inventory
+POST {{baseUrl}}/inventory/reserve
+Content-Type: application/json
+
+{
+  "items": [
+    { "sku": "ITEM-002", "quantity": 5 }
+  ],
+  "orderId": "ORD-SAGA-001"
+}
+
+### 3. Shipping FAILS (simulate with invalid address or retry until it fails)
+POST {{baseUrl}}/shipping/create-label
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "street": "Invalid",
+    "city": "Invalid",
+    "state": "XX",
+    "zip": "00000",
+    "country": "US"
+  },
+  "orderId": "ORD-SAGA-001"
+}
+
+### 4. COMPENSATION: Release Inventory
+POST {{baseUrl}}/inventory/release
+Content-Type: application/json
+
+{
+  "reservationId": "res_from_step2"
+}
+
+### 5. COMPENSATION: Release Payment
+POST {{baseUrl}}/payment/release
+Content-Type: application/json
+
+{
+  "authId": "auth_from_step1"
+}
+
+
+### ========================================
+### CHAOS TESTING - All Domains
+### ========================================
+
+### Test Payment Authorization (Run 10x to see all scenarios)
+POST {{baseUrl}}/payment/authorize
 Content-Type: application/json
 
 {
   "amount": 5000,
-  "currency": "usd",
-  "source": "tok_visa",
-  "description": "Premium user context subscription"
-}
-
-###
-
-### 4. Process Payment Charge - Small Amount
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": 100,
-  "currency": "usd",
-  "source": "tok_amex",
-  "description": "Small test charge - $1.00"
-}
-
-###
-
-###############################################
-# STATISTICS ENDPOINTS
-###############################################
-
-### 5. Get Payment Statistics
-# Shows distribution of chaos scenarios
-GET {{baseUrl}}/payment/stats
-Content-Type: application/json
-
-###
-
-### 6. Get Recent Requests (Default: 10)
-GET {{baseUrl}}/payment/stats/recent
-Content-Type: application/json
-
-###
-
-### 7. Get Recent Requests (Last 20)
-GET {{baseUrl}}/payment/stats/recent?limit=20
-Content-Type: application/json
-
-###
-
-### 8. Get Recent Requests (Last 50)
-GET {{baseUrl}}/payment/stats/recent?limit=50
-Content-Type: application/json
-
-###
-
-### 9. Reset Statistics
-POST {{baseUrl}}/payment/stats/reset
-Content-Type: application/json
-
-###
-
-###############################################
-# CHAOS TESTING SCENARIOS
-###############################################
-
-### 10. Test Multiple Payments (Execute 10 times manually)
-# Click "Send Request" multiple times to see different chaos scenarios
-# Expected distribution: ~4 success, ~3 timeouts, ~2 errors (500), ~1 error (402)
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-x-correlation-id: batch-test-{{$timestamp}}
-
-{
-  "amount": 1000,
-  "currency": "usd",
-  "source": "tok_visa",
-  "description": "Batch test payment #{{$randomInt}}"
-}
-
-###
-
-### 11. High Value Payment Test
-# Test chaos with high value transactions
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": 50000,
-  "currency": "usd",
-  "source": "tok_visa_debit",
-  "description": "High value transaction - $500.00"
-}
-
-###
-
-### 12. EUR Currency Test
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": 1500,
-  "currency": "eur",
-  "source": "tok_mastercard",
-  "description": "European payment test"
-}
-
-###
-
-###############################################
-# EXPECTED RESPONSES
-###############################################
-
-# SUCCESS (40% probability) - HTTP 200
-# {
-#   "success": true,
-#   "chargeId": "ch_1234567890abcdef",
-#   "amount": 1000,
-#   "currency": "usd",
-#   "status": "succeeded",
-#   "createdAt": "2024-01-26T10:30:00.000Z",
-#   "description": "Test payment"
-# }
-
-###
-
-# TIMEOUT (30% probability) - HTTP 408
-# Wait: 5 seconds delay before response
-# {
-#   "success": false,
-#   "error": "timeout",
-#   "message": "Payment service timeout - request took too long to process"
-# }
-
-###
-
-# INTERNAL ERROR (20% probability) - HTTP 500
-# {
-#   "success": false,
-#   "error": "internal_error",
-#   "message": "An internal error occurred while processing payment"
-# }
-
-###
-
-# INSUFFICIENT FUNDS (10% probability) - HTTP 402
-# {
-#   "success": false,
-#   "error": "insufficient_funds",
-#   "message": "The card has insufficient funds to complete this transaction"
-# }
-
-###
-
-###############################################
-# TESTING WORKFLOWS
-###############################################
-
-### Workflow 1: Fresh Start
-# 1. Reset stats
-# 2. Execute 20 payments
-# 3. Check distribution
-
-###
-
-### Step 1: Reset Statistics
-POST {{baseUrl}}/payment/stats/reset
-
-###
-
-### Step 2: Execute Payment (Repeat 20 times)
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": 1000,
-  "currency": "usd",
-  "source": "tok_visa",
-  "description": "Workflow test payment"
-}
-
-###
-
-### Step 3: Verify Distribution
-GET {{baseUrl}}/payment/stats
-
-###
-
-### Expected Stats After 20 Requests:
-# {
-#   "totalRequests": 20,
-#   "successful": ~8,     // 40%
-#   "timeouts": ~6,       // 30%
-#   "errors500": ~4,      // 20%
-#   "errors402": ~2,      // 10%
-#   "successRate": "~0.40",
-#   "distribution": {
-#     "timeout": "~30.0%",
-#     "error500": "~20.0%",
-#     "error402": "~10.0%",
-#     "success": "~40.0%"
-#   }
-# }
-
-###
-
-###############################################
-# PERFORMANCE TESTING
-###############################################
-
-### Test 1: Response Time (Success Scenario)
-# Expected: < 100ms
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": 100,
-  "currency": "usd",
-  "source": "tok_visa"
-}
-
-###
-
-### Test 2: Timeout Scenario Detection
-# If you get 408, it took ~5 seconds
-# If you get 200, it was < 100ms
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": 500,
-  "currency": "usd",
-  "source": "tok_visa"
-}
-
-###
-
-###############################################
-# CORRELATION ID TRACKING
-###############################################
-
-### Payment 1 - Track with Custom ID
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-x-correlation-id: payment-flow-001
-
-{
-  "amount": 1000,
-  "currency": "usd",
-  "source": "tok_visa",
-  "description": "First payment in flow"
-}
-
-###
-
-### Payment 2 - Same Flow, Different ID
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-x-correlation-id: payment-flow-002
-
-{
-  "amount": 2000,
-  "currency": "usd",
-  "source": "tok_visa",
-  "description": "Second payment in flow"
-}
-
-###
-
-### Check Logs for Correlation
-# In terminal: npm run dev 2>&1 | grep "payment-flow-001"
-# You should see all logs for that specific payment
-
-###
-
-###############################################
-# VALIDATION ERRORS
-###############################################
-
-### Invalid Amount (Should fail validation - 400)
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": -100,
-  "currency": "usd",
-  "source": "tok_visa"
-}
-
-###
-
-### Missing Required Field (Should fail validation - 400)
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": 1000,
   "currency": "usd"
 }
 
-###
-
-### Invalid Amount Type (Should fail validation - 400)
-POST {{baseUrl}}/payment/charge
+### Test Inventory Reserve (Run 10x to see all scenarios)
+POST {{baseUrl}}/inventory/reserve
 Content-Type: application/json
 
 {
-  "amount": "not-a-number",
-  "currency": "usd",
-  "source": "tok_visa"
+  "items": [
+    { "sku": "ITEM-001", "quantity": 1 }
+  ]
 }
 
-###
+### Test Shipping Label (Run 5x - takes ~20s each for success)
+POST {{baseUrl}}/shipping/create-label
+Content-Type: application/json
 
-###############################################
-# DOCUMENTATION & MONITORING
-###############################################
+{
+  "shippingAddress": {
+    "street": "789 Test St",
+    "city": "Boston",
+    "state": "MA",
+    "zip": "02101",
+    "country": "US"
+  }
+}
 
-### Open Swagger UI
+### Test Notification (Run 10x to see all scenarios)
+POST {{baseUrl}}/notification/send
+Content-Type: application/json
+
+{
+  "type": "email",
+  "recipient": "test@example.com",
+  "subject": "Test",
+  "message": "Test message"
+}
+
+
+### ========================================
+### SWAGGER UI
+### ========================================
+
+### Open Swagger Documentation
 # Browser: {{baseUrl}}/api/docs
 
 ###
 
-### Health Check via Stats Endpoint
-GET {{baseUrl}}/payment/stats
+### ========================================
+### QUICK TIPS - Phase 4
+### ========================================
 
-###
-
-###############################################
-# QUICK TIPS
-###############################################
-
-# 1. Execute payment request 10-20 times to see all chaos scenarios
-# 2. Use custom correlation IDs for easier log tracking
-# 3. Check stats after each batch to verify distribution
-# 4. Reset stats before running new test batches
-# 5. Timeouts will take 5+ seconds - be patient!
-# 6. Use Swagger UI for interactive testing: {{baseUrl}}/api/docs
-
-###
-
-###############################################
-# INTEGRATION TESTING
-###############################################
-
-### Scenario: Retry Logic Test
-# Execute this 3 times:
-# - If you get 408 or 500: Should retry
-# - If you get 402: Should NOT retry (permanent error)
-# - If you get 200: Success, no retry needed
-
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-x-correlation-id: retry-test-{{$timestamp}}
-
-{
-  "amount": 1000,
-  "currency": "usd",
-  "source": "tok_visa",
-  "description": "Testing retry logic"
-}
-
-###
-
-### Scenario: Circuit Breaker Test
-# Execute 10 requests rapidly
-# If failure rate > 50%, circuit breaker should open
-# (This would be implemented in the calling service, not here)
-
-POST {{baseUrl}}/payment/charge
-Content-Type: application/json
-
-{
-  "amount": 1000,
-  "currency": "usd",
-  "source": "tok_visa",
-  "description": "Circuit breaker test"
-}
+# 1. Each domain has its own chaos distribution (see Swagger for details)
+# 2. Payment: authorize → capture OR release (Saga compensation)
+# 3. Inventory: reserve → release (compensation after 30 min auto-expire)
+# 4. Shipping: create-label is LONG-RUNNING (~20s) - demonstrates heartbeats
+# 5. Notification: NON-CRITICAL - failure doesn't trigger Saga rollback
+# 6. Test Saga pattern: intentionally fail a step to see compensations
+# 7. Use correlation IDs (x-correlation-id header) for distributed tracing
+# 8. Check Temporal UI after workflows to see complete execution history
 
 ###
 
 ### End of File
-# Happy Testing! 🎲💥
+# Ready for Temporal Order Fulfillment Workflow! 🏗️💥

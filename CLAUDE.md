@@ -6,12 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🎯 PROJECT STATUS
 
-**Current Phase:** PHASE 3 - COMPLETE ✅
-**Next Phase:** PHASE 4 - Advanced Patterns 🔜
+**Current Phase:** PHASE 4 - COMPLETE ✅
+**Next Phase:** PHASE 5 - Advanced Patterns 🔜
 
 **Architecture Evolution:**
-Progressive TypeScript project evolving from API aggregator → Temporal-orchestrated microservices (5 phases).
-Plan: `/Users/erickdelacruz/.claude/plans/hazy-leaping-lighthouse.md`
+Progressive TypeScript project evolving from API aggregator → Temporal-orchestrated microservices → Production-ready order fulfillment system (5 phases).
+Plan: `/docs/PHASE_4_PLAN.md`
 
 ---
 
@@ -32,18 +32,28 @@ Production-ready API aggregator combining 3 external APIs with hexagonal archite
 - `GET /health` - Health check
 - `GET /api/docs` - Swagger UI
 
-### Phase 2: Fake Stripe Chaos (Port 3001)
-Chaos engineering payment service for resilience testing.
+### Phase 2 → Phase 4: Fake Stripe Order Fulfillment (Port 3001)
+Complete order fulfillment service with chaos engineering across 4 bounded contexts.
 
-**Features:**
-- Chaos Engine (40% success, 30% timeout, 20% error500, 10% error402)
-- Statistics tracking + recent request history
-- Full correlation ID support
+**Architecture:** Vertical Slices + Hexagonal (per domain)
+
+**4 Bounded Contexts:**
+1. **Payment Domain** - Authorize, capture, release, refund (40-85% success rates)
+2. **Inventory Domain** - Reserve, release with 30min expiration (50-90% success)
+3. **Shipping Domain** - Create label (long-running ~20s), cancel (60-95% success)
+4. **Notification Domain** - Send email/SMS (non-critical, 80% success)
+
+**Key Features:**
+- Hexagonal architecture per domain (domain/application/infrastructure/presentation)
+- Saga pattern support (compensations for rollback)
+- Long-running operations with heartbeat (shipping)
+- Domain-specific chaos scenarios
 
 **Endpoints:**
-- `POST /payment/charge` - Process payment with chaos
-- `GET /payment/stats` - View distribution
-- `POST /payment/stats/reset` - Reset stats
+- `POST /payment/{authorize,capture,release,refund}` - Payment operations
+- `POST /inventory/{reserve,release}` - Inventory management
+- `POST /shipping/{create-label,cancel}` - Shipping operations
+- `POST /notification/send` - Customer notifications
 - `GET /api/docs` - Swagger UI
 
 ### Phase 3: Temporal Orchestration (Ports 3002, 7233, 8080)
@@ -79,6 +89,56 @@ Durable workflow orchestration with automatic retry and Saga pattern.
 - `GET /health` - Health check
 - `GET /api/docs` - Swagger UI
 
+### Phase 4: Order Fulfillment Workflow ✅ NEW
+Production-ready order fulfillment with ALL Temporal features demonstrated.
+
+**Workflow:** `orderFulfillmentWorkflow`
+
+**Flow:**
+```
+1. Authorize Payment (hold funds)
+   ↓
+2. Wait for Manager Approval (Signal + 2min timeout)
+   ↓
+3. Reserve Inventory
+   ↓
+4. Capture Payment (charge funds)
+   ↓
+5. Create Shipping Label (long-running ~20s with heartbeat)
+   ↓
+6. Send Notification (non-critical)
+   ✅ ORDER COMPLETE
+```
+
+**Temporal Features Demonstrated:**
+1. ✅ **Signals** - approve, reject, cancel order at any time
+2. ✅ **Queries** - getOrderStatus, getProgress (real-time, read-only)
+3. ✅ **Search Attributes** - orderId, customerId, orderStatus, totalAmount
+4. ✅ **Activity Heartbeats** - Shipping label progress tracking
+5. ✅ **Activity Cancellation** - Graceful cleanup on workflow cancel
+6. ✅ **Timeouts** - Approval timeout (2 min) auto-rejects
+7. ✅ **Retry Policies** - Domain-specific (payment 3x, inventory 2x, shipping 5x)
+8. ✅ **Saga Pattern** - Automatic compensation on failure (refund, release, cancel)
+9. ✅ **Idempotency** - Safe activity retries with correlation IDs
+10. ✅ **Long-Running Activities** - Shipping ~20s with progress updates
+
+**Saga Compensations:**
+- Manager rejects → Release payment hold
+- Timeout → Release payment hold
+- Inventory fails → Release payment hold
+- Payment capture fails → Release inventory
+- Shipping fails → Refund payment + Release inventory
+- Cancel signal → Full rollback of all completed steps
+
+**Order Fulfillment API Endpoints:**
+- `POST /order` - Start order workflow
+- `POST /order/:id/approve` - Approve order (Signal)
+- `POST /order/:id/reject` - Reject order (Signal)
+- `POST /order/:id/cancel` - Cancel order (Signal)
+- `GET /order/:id/status` - Get complete order state (Query)
+- `GET /order/:id/progress` - Get progress 0-100% (Query)
+- `GET /order/:id/result` - Wait for completion (blocking)
+
 ---
 
 ## ⚡ QUICK START
@@ -100,18 +160,19 @@ open http://localhost:3002/api/docs          # Temporal API
 open http://localhost:8080                   # Temporal UI
 
 # Test
-# Open requests.http or packages/temporal-api/requests.http in VS Code
-# Install "REST Client" extension to use
+# Open requests.http files in VS Code with "REST Client" extension
 ```
 
 **Important Files:**
 - `packages/founder/README.md` - Founder service documentation
-- `packages/fake-stripe-chaos/README.md` - Chaos service guide
+- `packages/fake-stripe-chaos/README.md` - Order fulfillment chaos service (Phase 4)
 - `packages/temporal-worker/README.md` - Temporal Worker guide
 - `packages/temporal-api/README.md` - Temporal API documentation
 - `docs/TEMPORAL_ARCHITECTURE.md` - Complete Temporal architecture guide
-- `requests.http` - API test collection (Founder + Fake Stripe)
-- `packages/temporal-api/requests.http` - Temporal API test collection
+- `docs/PHASE_4_PLAN.md` - Phase 4 implementation plan
+- `packages/fake-stripe-chaos/requests.http` - Fake Stripe endpoints (4 domains)
+- `packages/temporal-api/requests-order.http` - Order Fulfillment workflow tests ⭐
+- `packages/temporal-api/requests.http` - User Context workflow tests
 
 ---
 
